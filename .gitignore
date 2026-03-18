@@ -1,0 +1,8 @@
+# This is a comment
+node_modules/
+*.log
+build/
+# Ignore a specific file
+secret_config.json
+
+.env

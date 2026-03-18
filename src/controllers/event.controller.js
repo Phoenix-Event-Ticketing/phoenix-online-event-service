@@ -1,0 +1,262 @@
+import { v4 as uuidv4 } from "uuid";
+import { Event } from "../models/event.model.js";
+import { logHttp } from "../utils/logger.js";
+
+export async function createEvent(req, res) {
+  try {
+    const eventId = `evt_${uuidv4()}`;
+    const event = await Event.create({
+      eventId,
+      ...req.body,
+      createdBy: req.user?.sub,
+    });
+
+    logHttp({
+      level: "info",
+      req,
+      res,
+      operation: "create_event",
+      message: "Event created",
+      metadata: { eventId: event.eventId },
+    });
+
+    return res.status(201).json(event);
+  } catch (err) {
+    logHttp({
+      level: "error",
+      req,
+      res,
+      operation: "create_event",
+      message: "Failed to create event",
+      metadata: { error: err.message },
+    });
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function listEvents(req, res) {
+  try {
+    logHttp({
+      level: "info",
+      req,
+      res,
+      operation: "list_events",
+      message: "Listing published events",
+    });
+    const events = await Event.find({ status: "PUBLISHED" }).lean();
+    return res.json(events);
+  } catch (err) {
+    logHttp({
+      level: "error",
+      req,
+      res,
+      operation: "list_events",
+      message: "Failed to list events",
+      metadata: { error: err.message },
+    });
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function getEventById(req, res) {
+  try {
+    const { eventId } = req.params;
+    const event = await Event.findOne({ eventId }).lean();
+    if (!event) {
+      logHttp({
+        level: "info",
+        req,
+        res,
+        operation: "get_event_by_id",
+        message: "Event not found",
+        metadata: { eventId },
+      });
+      return res.status(404).json({ message: "Event not found" });
+    }
+    return res.json(event);
+  } catch (err) {
+    logHttp({
+      level: "error",
+      req,
+      res,
+      operation: "get_event_by_id",
+      message: "Failed to fetch event",
+      metadata: { error: err.message },
+    });
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function getInternalEvent(req, res) {
+  try {
+    const { eventId } = req.params;
+    const event = await Event.findOne({ eventId }).lean();
+    if (!event) {
+      logHttp({
+        level: "info",
+        req,
+        res,
+        operation: "get_internal_event",
+        message: "Internal event not found",
+        metadata: { eventId },
+      });
+      return res.status(404).json({ message: "Event not found" });
+    }
+    logHttp({
+      level: "info",
+      req,
+      res,
+      operation: "get_internal_event",
+      message: "Internal event fetched",
+      metadata: { eventId },
+    });
+    return res.json(event);
+  } catch (err) {
+    logHttp({
+      level: "error",
+      req,
+      res,
+      operation: "get_internal_event",
+      message: "Failed to fetch internal event",
+      metadata: { error: err.message },
+    });
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function updateEvent(req, res) {
+  try {
+    const { eventId } = req.params;
+    logHttp({
+      level: "info",
+      req,
+      res,
+      operation: "update_event",
+      message: "Updating event",
+      metadata: { eventId },
+    });
+    const updated = await Event.findOneAndUpdate({ eventId }, req.body, {
+      new: true,
+    });
+    if (!updated) {
+      logHttp({
+        level: "info",
+        req,
+        res,
+        operation: "update_event",
+        message: "Event to update not found",
+        metadata: { eventId },
+      });
+      return res.status(404).json({ message: "Event not found" });
+    }
+    return res.json(updated);
+  } catch (err) {
+    logHttp({
+      level: "error",
+      req,
+      res,
+      operation: "update_event",
+      message: "Failed to update event",
+      metadata: { error: err.message },
+    });
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function publishEvent(req, res) {
+  try {
+    const { eventId } = req.params;
+    logHttp({
+      level: "info",
+      req,
+      res,
+      operation: "publish_event",
+      message: "Publishing event",
+      metadata: { eventId },
+    });
+    const updated = await Event.findOneAndUpdate(
+      { eventId },
+      { status: "PUBLISHED" },
+      { new: true },
+    );
+    if (!updated) {
+      logHttp({
+        level: "info",
+        req,
+        res,
+        operation: "publish_event",
+        message: "Event to publish not found",
+        metadata: { eventId },
+      });
+      return res.status(404).json({ message: "Event not found" });
+    }
+    logHttp({
+      level: "info",
+      req,
+      res,
+      operation: "publish_event",
+      message: "Event published",
+      metadata: { eventId },
+    });
+    return res.json(updated);
+  } catch (err) {
+    logHttp({
+      level: "error",
+      req,
+      res,
+      operation: "publish_event",
+      message: "Failed to publish event",
+      metadata: { error: err.message },
+    });
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function cancelEvent(req, res) {
+  try {
+    const { eventId } = req.params;
+    logHttp({
+      level: "info",
+      req,
+      res,
+      operation: "cancel_event",
+      message: "Cancelling event",
+      metadata: { eventId },
+    });
+    const updated = await Event.findOneAndUpdate(
+      { eventId },
+      { status: "CANCELLED" },
+      { new: true },
+    );
+    if (!updated) {
+      logHttp({
+        level: "info",
+        req,
+        res,
+        operation: "cancel_event",
+        message: "Event to cancel not found",
+        metadata: { eventId },
+      });
+      return res.status(404).json({ message: "Event not found" });
+    }
+    logHttp({
+      level: "info",
+      req,
+      res,
+      operation: "cancel_event",
+      message: "Event cancelled",
+      metadata: { eventId },
+    });
+    return res.json(updated);
+  } catch (err) {
+    logHttp({
+      level: "error",
+      req,
+      res,
+      operation: "cancel_event",
+      message: "Failed to cancel event",
+      metadata: { error: err.message },
+    });
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
