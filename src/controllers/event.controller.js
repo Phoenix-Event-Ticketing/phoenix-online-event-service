@@ -76,6 +76,30 @@ export async function listEvents(req, res) {
   }
 }
 
+export async function listAllEvents(req, res) {
+  try {
+    logHttp({
+      level: "info",
+      req,
+      res,
+      operation: "list_all_events",
+      message: "Listing all events (DRAFT, PUBLISHED, CANCELLED)",
+    });
+    const events = await Event.find({}).lean();
+    return res.json(events);
+  } catch (err) {
+    logHttp({
+      level: "error",
+      req,
+      res,
+      operation: "list_all_events",
+      message: "Failed to list all events",
+      metadata: { error: err.message },
+    });
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 export async function getEventById(req, res) {
   try {
     const { eventId } = req.params;

@@ -2,6 +2,7 @@ import express from "express";
 import {
   createEvent,
   listEvents,
+  listAllEvents,
   getEventById,
   updateEvent,
   publishEvent,
@@ -22,14 +23,19 @@ const PERMISSIONS = {
 export const router = express.Router();
 
 router.get("/", listEvents);
-router.get("/:eventId", getEventById);
-
+router.get(
+  "/internal/events",
+  authenticate,
+  authorize([PERMISSIONS.VIEW_EVENTS]),
+  listAllEvents,
+);
 router.get(
   "/internal/events/:eventId",
   authenticate,
   authorize([PERMISSIONS.VIEW_EVENTS]),
   getInternalEvent,
 );
+router.get("/:eventId", getEventById);
 
 router.post(
   "/",
