@@ -9,6 +9,7 @@ import {
   getInternalEvent,
 } from "../controllers/event.controller.js";
 import { authenticate, authorize } from "../middleware/auth.js";
+import { uploadBannerOptional } from "../middleware/uploadBanner.js";
 
 const PERMISSIONS = {
   VIEW_EVENTS: "VIEW_EVENTS",
@@ -34,6 +35,7 @@ router.post(
   "/",
   authenticate,
   authorize([PERMISSIONS.CREATE_EVENT]),
+  uploadBannerOptional,
   createEvent,
 );
 
@@ -41,6 +43,7 @@ router.put(
   "/:eventId",
   authenticate,
   authorize([PERMISSIONS.UPDATE_EVENT]),
+  uploadBannerOptional,
   updateEvent,
 );
 

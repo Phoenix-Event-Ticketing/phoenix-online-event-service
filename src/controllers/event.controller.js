@@ -1,13 +1,30 @@
 import { v4 as uuidv4 } from "uuid";
 import { Event } from "../models/event.model.js";
 import { logHttp } from "../utils/logger.js";
+import { uploadBufferToCloudinary } from "../utils/upload.js";
+
+function prepareEventBody(body) {
+  const { eventDateTime, ...rest } = body;
+  const data = { ...rest };
+  if (eventDateTime != null) {
+    data.eventDateTime = typeof eventDateTime === "string" ? new Date(eventDateTime) : eventDateTime;
+  }
+  return data;
+}
 
 export async function createEvent(req, res) {
   try {
     const eventId = `evt_${uuidv4()}`;
+    const body = prepareEventBody(req.body || {});
+
+    let bannerUrl = body.bannerUrl;
+    if (req.file) {
+      bannerUrl = await uploadBufferToCloudinary(req.file.buffer, req.file.mimetype);
+    }
     const event = await Event.create({
       eventId,
-      ...req.body,
+      ...body,
+      ...(bannerUrl != null && { bannerUrl }),
       createdBy: req.user?.sub,
     });
 
@@ -22,6 +39,7 @@ export async function createEvent(req, res) {
 
     return res.status(201).json(event);
   } catch (err) {
+    const isUploadError = err.message?.includes("Cloudinary") || err.message?.includes("Invalid file type");
     logHttp({
       level: "error",
       req,
@@ -30,7 +48,7 @@ export async function createEvent(req, res) {
       message: "Failed to create event",
       metadata: { error: err.message },
     });
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(isUploadError ? 400 : 500).json({ message: err.message || "Internal server error" });
   }
 }
 
@@ -135,7 +153,13 @@ export async function updateEvent(req, res) {
       message: "Updating event",
       metadata: { eventId },
     });
-    const updated = await Event.findOneAndUpdate({ eventId }, req.body, {
+
+    const body = prepareEventBody(req.body || {});
+    if (req.file) {
+      body.bannerUrl = await uploadBufferToCloudinary(req.file.buffer, req.file.mimetype);
+    }
+
+    const updated = await Event.findOneAndUpdate({ eventId }, body, {
       new: true,
     });
     if (!updated) {
@@ -151,6 +175,7 @@ export async function updateEvent(req, res) {
     }
     return res.json(updated);
   } catch (err) {
+    const isUploadError = err.message?.includes("Cloudinary") || err.message?.includes("Invalid file type");
     logHttp({
       level: "error",
       req,
@@ -159,7 +184,7 @@ export async function updateEvent(req, res) {
       message: "Failed to update event",
       metadata: { error: err.message },
     });
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(isUploadError ? 400 : 500).json({ message: err.message || "Internal server error" });
   }
 }
 
