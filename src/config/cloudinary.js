@@ -9,4 +9,4 @@ if (env.cloudinary?.cloudName && env.cloudinary?.apiKey && env.cloudinary?.apiSe
   });
 }
 
-export { cloudinary };
+export { v2 as cloudinary } from "cloudinary";

@@ -11,7 +11,7 @@ export const logger = pino({
 });
 
 export function logHttp(options) {
-  const { level = "info", req, res, operation, message, metadata = {} } = options;
+  const { level = "info", req, operation, message, metadata = {} } = options;
 
   const logPayload = {
     timestamp: new Date().toISOString(),
