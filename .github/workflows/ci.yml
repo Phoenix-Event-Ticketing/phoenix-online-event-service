@@ -47,7 +47,5 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.projectKey=Phoenix-Event-Ticketing_phoenix-online-event-service
-            -Dsonar.organization=phoenix-event-ticketing
             -Dsonar.qualitygate.wait=true
             -Dsonar.qualitygate.timeout=300
