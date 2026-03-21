@@ -1,0 +1,569 @@
+/** OpenAPI 3.0 document for `/api/v1/events` only (public + authenticated event routes). */
+
+const sampleEvent = {
+  _id: "507f1f77bcf86cd799439011",
+  eventId: "evt_550e8400-e29b-41d4-a716-446655440000",
+  title: "Phoenix Tech Meetup",
+  description: "Monthly developer networking and lightning talks.",
+  venue: "BMICH Convention Hall A",
+  city: "Colombo",
+  eventDateTime: "2025-06-15T10:00:00.000Z",
+  organizerName: "Phoenix Events",
+  category: "TECH",
+  bannerUrl:
+    "https://res.cloudinary.com/demo/image/upload/v1/banners/sample.jpg",
+  status: "PUBLISHED",
+  createdBy: "auth0|user_abc123",
+  createdAt: "2025-03-01T08:00:00.000Z",
+  updatedAt: "2025-03-10T12:30:00.000Z",
+};
+
+const sampleEventDraft = {
+  ...sampleEvent,
+  status: "DRAFT",
+  bannerUrl: null,
+};
+
+const sampleEventCancelled = {
+  ...sampleEvent,
+  status: "CANCELLED",
+};
+
+/** Inline response/request shapes (not under `components.schemas`). */
+const schemaEvent = { type: "object", description: "Event document (JSON)" };
+const schemaErr = {
+  type: "object",
+  properties: { message: { type: "string" } },
+};
+const schemaCreateBody = {
+  type: "object",
+  required: [
+    "title",
+    "venue",
+    "city",
+    "eventDateTime",
+    "organizerName",
+    "category",
+  ],
+  properties: {
+    title: { type: "string", example: "New Workshop" },
+    description: { type: "string", example: "Hands-on session." },
+    venue: { type: "string", example: "Hall B" },
+    city: { type: "string", example: "Kandy" },
+    eventDateTime: {
+      type: "string",
+      format: "date-time",
+      example: "2025-07-01T09:00:00.000Z",
+    },
+    organizerName: { type: "string", example: "Campus Guild" },
+    category: { type: "string", example: "WORKSHOP" },
+    bannerUrl: {
+      type: "string",
+      example: "https://example.com/banner.png",
+      description: "Optional if uploading a file as `banner` instead.",
+    },
+  },
+};
+const schemaUpdateBody = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+    description: { type: "string" },
+    venue: { type: "string" },
+    city: { type: "string" },
+    eventDateTime: { type: "string", format: "date-time" },
+    organizerName: { type: "string" },
+    category: { type: "string" },
+    bannerUrl: { type: "string" },
+  },
+};
+
+export const eventServiceOpenApi = {
+  openapi: "3.0.3",
+  info: {
+    title: "Phoenix Online Event Service API",
+    version: "1.0.0",
+    description:
+      "REST API for event resources under `/api/v1/events`. JWT bearer auth is required for create, update, publish, cancel, and internal list/detail operations.",
+  },
+  tags: [
+    {
+      name: "Events (public)",
+      description: "Published listings and public event detail",
+    },
+    {
+      name: "Events (authenticated)",
+      description: "Mutations and internal views (JWT + permissions)",
+    },
+  ],
+  paths: {
+    "/": {
+      get: {
+        tags: ["Events (public)"],
+        summary: "List published events",
+        description: "Returns all events with `status: PUBLISHED`.",
+        operationId: "listPublishedEvents",
+        responses: {
+          200: {
+            description: "Array of published events",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: schemaEvent,
+                },
+                example: [sampleEvent],
+              },
+            },
+          },
+          500: {
+            description: "Server error",
+            content: {
+              "application/json": {
+                schema: schemaErr,
+                example: { message: "Internal server error" },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ["Events (authenticated)"],
+        summary: "Create event",
+        description:
+          "Requires permission `CREATE_EVENT`. Send JSON or `multipart/form-data` with optional file field `banner` for image upload.",
+        operationId: "createEvent",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: schemaCreateBody,
+            },
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                required: [
+                  "title",
+                  "venue",
+                  "city",
+                  "eventDateTime",
+                  "organizerName",
+                  "category",
+                ],
+                properties: {
+                  title: { type: "string" },
+                  description: { type: "string" },
+                  venue: { type: "string" },
+                  city: { type: "string" },
+                  eventDateTime: { type: "string", format: "date-time" },
+                  organizerName: { type: "string" },
+                  category: { type: "string" },
+                  bannerUrl: { type: "string" },
+                  banner: {
+                    type: "string",
+                    format: "binary",
+                    description:
+                      "Optional image; stored on Cloudinary, URL saved as `bannerUrl`.",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: "Created event",
+            content: {
+              "application/json": {
+                schema: schemaEvent,
+                example: sampleEventDraft,
+              },
+            },
+          },
+          400: {
+            description: "Validation or upload error",
+            content: {
+              "application/json": {
+                schema: schemaErr,
+                example: { message: "Invalid file type" },
+              },
+            },
+          },
+          401: {
+            description: "Missing or invalid JWT",
+            content: {
+              "application/json": {
+                schema: schemaErr,
+                example: { message: "Invalid or expired token" },
+              },
+            },
+          },
+          403: {
+            description: "Insufficient permissions",
+            content: {
+              "application/json": {
+                schema: schemaErr,
+                example: { message: "Forbidden" },
+              },
+            },
+          },
+          500: {
+            description: "Server error",
+            content: {
+              "application/json": {
+                schema: schemaErr,
+                example: { message: "Internal server error" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/{eventId}": {
+      get: {
+        tags: ["Events (public)"],
+        summary: "Get event by ID",
+        operationId: "getEventById",
+        parameters: [
+          {
+            name: "eventId",
+            in: "path",
+            required: true,
+            schema: { type: "string", example: sampleEvent.eventId },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Event found (any status)",
+            content: {
+              "application/json": {
+                schema: schemaEvent,
+                example: sampleEvent,
+              },
+            },
+          },
+          404: {
+            description: "Not found",
+            content: {
+              "application/json": {
+                schema: schemaErr,
+                example: { message: "Event not found" },
+              },
+            },
+          },
+          500: {
+            description: "Server error",
+            content: {
+              "application/json": {
+                schema: schemaErr,
+                example: { message: "Internal server error" },
+              },
+            },
+          },
+        },
+      },
+      put: {
+        tags: ["Events (authenticated)"],
+        summary: "Update event",
+        description:
+          "Requires `UPDATE_EVENT`. Partial updates via provided fields only. Optional `banner` file upload.",
+        operationId: "updateEvent",
+        parameters: [
+          {
+            name: "eventId",
+            in: "path",
+            required: true,
+            schema: { type: "string", example: sampleEvent.eventId },
+          },
+        ],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: schemaUpdateBody,
+              example: {
+                title: "Phoenix Tech Meetup — June",
+                venue: "BMICH Hall B",
+              },
+            },
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  description: { type: "string" },
+                  venue: { type: "string" },
+                  city: { type: "string" },
+                  eventDateTime: { type: "string", format: "date-time" },
+                  organizerName: { type: "string" },
+                  category: { type: "string" },
+                  bannerUrl: { type: "string" },
+                  banner: { type: "string", format: "binary" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: "Updated event",
+            content: {
+              "application/json": {
+                schema: schemaEvent,
+                example: sampleEvent,
+              },
+            },
+          },
+          400: {
+            description: "Upload error",
+            content: {
+              "application/json": {
+                schema: schemaErr,
+                example: { message: "Invalid file type" },
+              },
+            },
+          },
+          401: {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                example: { message: "Missing or invalid Authorization header" },
+              },
+            },
+          },
+          403: {
+            description: "Forbidden",
+            content: {
+              "application/json": {
+                example: { message: "Forbidden" },
+              },
+            },
+          },
+          404: {
+            description: "Event not found",
+            content: {
+              "application/json": {
+                example: { message: "Event not found" },
+              },
+            },
+          },
+          500: {
+            description: "Server error",
+            content: {
+              "application/json": {
+                example: { message: "Internal server error" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/{eventId}/publish": {
+      patch: {
+        tags: ["Events (authenticated)"],
+        summary: "Publish event",
+        description: "Sets `status` to `PUBLISHED`. Requires `PUBLISH_EVENT`.",
+        operationId: "publishEvent",
+        parameters: [
+          {
+            name: "eventId",
+            in: "path",
+            required: true,
+            schema: { type: "string", example: sampleEvent.eventId },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Published event",
+            content: {
+              "application/json": {
+                schema: schemaEvent,
+                example: sampleEvent,
+              },
+            },
+          },
+          401: {
+            content: {
+              "application/json": {
+                example: { message: "Invalid or expired token" },
+              },
+            },
+          },
+          403: {
+            content: {
+              "application/json": {
+                example: { message: "Forbidden" },
+              },
+            },
+          },
+          404: {
+            content: {
+              "application/json": {
+                example: { message: "Event not found" },
+              },
+            },
+          },
+          500: {
+            content: {
+              "application/json": {
+                example: { message: "Internal server error" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/{eventId}/cancel": {
+      patch: {
+        tags: ["Events (authenticated)"],
+        summary: "Cancel event",
+        description: "Sets `status` to `CANCELLED`. Requires `UPDATE_EVENT`.",
+        operationId: "cancelEvent",
+        parameters: [
+          {
+            name: "eventId",
+            in: "path",
+            required: true,
+            schema: { type: "string", example: sampleEvent.eventId },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Cancelled event",
+            content: {
+              "application/json": {
+                schema: schemaEvent,
+                example: sampleEventCancelled,
+              },
+            },
+          },
+          401: {
+            content: {
+              "application/json": {
+                example: { message: "Invalid or expired token" },
+              },
+            },
+          },
+          403: {
+            content: {
+              "application/json": {
+                example: { message: "Forbidden" },
+              },
+            },
+          },
+          404: {
+            content: {
+              "application/json": {
+                example: { message: "Event not found" },
+              },
+            },
+          },
+          500: {
+            content: {
+              "application/json": {
+                example: { message: "Internal server error" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/internal/events": {
+      get: {
+        tags: ["Events (authenticated)"],
+        summary: "List all events (internal)",
+        description: "Returns events in every status. Requires `VIEW_EVENTS`.",
+        operationId: "listAllEventsInternal",
+        responses: {
+          200: {
+            description: "All events",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: schemaEvent,
+                },
+                example: [sampleEventDraft, sampleEvent, sampleEventCancelled],
+              },
+            },
+          },
+          401: {
+            content: {
+              "application/json": {
+                example: { message: "Missing or invalid Authorization header" },
+              },
+            },
+          },
+          403: {
+            content: {
+              "application/json": {
+                example: { message: "Forbidden" },
+              },
+            },
+          },
+          500: {
+            content: {
+              "application/json": {
+                example: { message: "Internal server error" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/internal/events/{eventId}": {
+      get: {
+        tags: ["Events (authenticated)"],
+        summary: "Get event by ID (internal)",
+        description: "Same payload as public get; requires `VIEW_EVENTS`.",
+        operationId: "getInternalEvent",
+        parameters: [
+          {
+            name: "eventId",
+            in: "path",
+            required: true,
+            schema: { type: "string", example: sampleEvent.eventId },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Event",
+            content: {
+              "application/json": {
+                schema: schemaEvent,
+                example: sampleEvent,
+              },
+            },
+          },
+          404: {
+            content: {
+              "application/json": {
+                example: { message: "Event not found" },
+              },
+            },
+          },
+          401: {
+            content: {
+              "application/json": {
+                example: { message: "Invalid or expired token" },
+              },
+            },
+          },
+          403: {
+            content: {
+              "application/json": {
+                example: { message: "Forbidden" },
+              },
+            },
+          },
+          500: {
+            content: {
+              "application/json": {
+                example: { message: "Internal server error" },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
