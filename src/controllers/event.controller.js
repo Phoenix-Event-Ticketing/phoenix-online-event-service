@@ -1,5 +1,13 @@
 import { v4 as uuidv4 } from "uuid";
+import { env } from "../config/env.js";
 import { Event } from "../models/event.model.js";
+import {
+  fetchEventAvailability,
+  fetchEventInventory,
+  LIST_FETCH_TIMEOUT_MS,
+  ticketsFromDetailSidecars,
+  ticketsFromInventoryListResponse,
+} from "../services/inventoryClient.js";
 import { logHttp } from "../utils/logger.js";
 import { uploadBufferToCloudinary } from "../utils/upload.js";
 
@@ -25,6 +33,27 @@ function prepareEventBody(body) {
     data.eventDateTime = typeof v === "string" ? new Date(v) : v;
   }
   return data;
+}
+
+async function loadInventorySidecars(eventId, req) {
+  if (!env.inventoryServiceUrl) {
+    return { ticketInventory: null, availabilitySummary: null };
+  }
+  const opts = { requestId: req.headers["x-request-id"] };
+  const [invRes, avRes] = await Promise.all([
+    fetchEventInventory(env.inventoryServiceUrl, eventId, opts),
+    fetchEventAvailability(env.inventoryServiceUrl, eventId, opts),
+  ]);
+  return {
+    ticketInventory: invRes.ok ? invRes.data : null,
+    availabilitySummary: avRes.ok ? avRes.data : null,
+  };
+}
+
+async function loadTicketsForEventDetail(eventId, req) {
+  const { ticketInventory, availabilitySummary } =
+    await loadInventorySidecars(eventId, req);
+  return ticketsFromDetailSidecars(ticketInventory, availabilitySummary);
 }
 
 export async function createEvent(req, res) {
@@ -90,7 +119,28 @@ export async function listEvents(req, res) {
       message: "Listing published events",
     });
     const events = await Event.find({ status: "PUBLISHED" }).lean();
-    return res.json(events);
+    if (!env.inventoryServiceUrl) {
+      return res.json(
+        events.map((e) => ({ ...e, tickets: [] })),
+      );
+    }
+    const opts = {
+      requestId: req.headers["x-request-id"],
+      timeoutMs: LIST_FETCH_TIMEOUT_MS,
+    };
+    const invResults = await Promise.all(
+      events.map((e) =>
+        fetchEventInventory(env.inventoryServiceUrl, e.eventId, opts),
+      ),
+    );
+    const enriched = events.map((event, i) => {
+      const inv = invResults[i];
+      const tickets = inv.ok
+        ? ticketsFromInventoryListResponse(inv.data)
+        : [];
+      return { ...event, tickets };
+    });
+    return res.json(enriched);
   } catch (err) {
     logHttp({
       level: "error",
@@ -143,7 +193,8 @@ export async function getEventById(req, res) {
       });
       return res.status(404).json({ message: "Event not found" });
     }
-    return res.json(event);
+    const tickets = await loadTicketsForEventDetail(eventId, req);
+    return res.json({ ...event, tickets });
   } catch (err) {
     logHttp({
       level: "error",
@@ -180,7 +231,8 @@ export async function getInternalEvent(req, res) {
       message: "Internal event fetched",
       metadata: { eventId },
     });
-    return res.json(event);
+    const sidecars = await loadInventorySidecars(eventId, req);
+    return res.json({ ...event, ...sidecars });
   } catch (err) {
     logHttp({
       level: "error",

@@ -117,6 +117,7 @@ describe("events API (integration)", () => {
       .expect(200);
     expect(getRes.body.eventId).toBe(eventId);
     expect(getRes.body.title).toBe("Summer Fest");
+    expect(Array.isArray(getRes.body.tickets)).toBe(true);
   });
 
   it("publishing makes the event visible on the public list", async () => {
@@ -135,6 +136,7 @@ describe("events API (integration)", () => {
     expect(listRes.body).toHaveLength(1);
     expect(listRes.body[0].eventId).toBe(created.eventId);
     expect(listRes.body[0].status).toBe("PUBLISHED");
+    expect(Array.isArray(listRes.body[0].tickets)).toBe(true);
   });
 
   it("internal list returns all events when authorized", async () => {

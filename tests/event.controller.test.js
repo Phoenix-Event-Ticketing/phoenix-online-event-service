@@ -24,6 +24,18 @@ await jest.unstable_mockModule("../src/models/event.model.js", () => ({
   },
 }));
 
+await jest.unstable_mockModule("../src/config/env.js", () => ({
+  env: {
+    port: 4001,
+    mongoUri: undefined,
+    nodeEnv: "test",
+    serviceName: "event-service",
+    jwtSecret: "dev-jwt-secret-change-in-prod",
+    inventoryServiceUrl: "",
+    cloudinary: {},
+  },
+}));
+
 await jest.unstable_mockModule("uuid", () => ({
   v4: jest.fn(() => "fixed-uuid"),
 }));
@@ -56,16 +68,18 @@ describe("event.controller", () => {
       const lean = jest.fn().mockResolvedValue([{ eventId: "evt_1" }]);
       mockFind.mockReturnValue({ lean });
       const res = mockRes();
-      await listEvents({}, res);
+      await listEvents({ headers: {} }, res);
       expect(mockFind).toHaveBeenCalledWith({ status: "PUBLISHED" });
-      expect(res.json).toHaveBeenCalledWith([{ eventId: "evt_1" }]);
+      expect(res.json).toHaveBeenCalledWith([
+        { eventId: "evt_1", tickets: [] },
+      ]);
     });
 
     it("responds 500 when listing fails", async () => {
       const lean = jest.fn().mockRejectedValue(new Error("db"));
       mockFind.mockReturnValue({ lean });
       const res = mockRes();
-      await listEvents({}, res);
+      await listEvents({ headers: {} }, res);
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ message: "Internal server error" });
     });
@@ -96,7 +110,10 @@ describe("event.controller", () => {
       const lean = jest.fn().mockResolvedValue(null);
       mockFindOne.mockReturnValue({ lean });
       const res = mockRes();
-      await getEventById({ params: { eventId: "evt_x" } }, res);
+      await getEventById(
+        { params: { eventId: "evt_x" }, headers: {} },
+        res,
+      );
       expect(res.status).toHaveBeenCalledWith(404);
     });
 
@@ -105,15 +122,24 @@ describe("event.controller", () => {
       const lean = jest.fn().mockResolvedValue(doc);
       mockFindOne.mockReturnValue({ lean });
       const res = mockRes();
-      await getEventById({ params: { eventId: "evt_x" } }, res);
-      expect(res.json).toHaveBeenCalledWith(doc);
+      await getEventById(
+        { params: { eventId: "evt_x" }, headers: {} },
+        res,
+      );
+      expect(res.json).toHaveBeenCalledWith({
+        ...doc,
+        tickets: [],
+      });
     });
 
     it("responds 500 when find fails", async () => {
       const lean = jest.fn().mockRejectedValue(new Error("db"));
       mockFindOne.mockReturnValue({ lean });
       const res = mockRes();
-      await getEventById({ params: { eventId: "evt_x" } }, res);
+      await getEventById(
+        { params: { eventId: "evt_x" }, headers: {} },
+        res,
+      );
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ message: "Internal server error" });
     });
@@ -124,7 +150,10 @@ describe("event.controller", () => {
       const lean = jest.fn().mockResolvedValue(null);
       mockFindOne.mockReturnValue({ lean });
       const res = mockRes();
-      await getInternalEvent({ params: { eventId: "evt_x" } }, res);
+      await getInternalEvent(
+        { params: { eventId: "evt_x" }, headers: {} },
+        res,
+      );
       expect(res.status).toHaveBeenCalledWith(404);
     });
 
@@ -133,8 +162,15 @@ describe("event.controller", () => {
       const lean = jest.fn().mockResolvedValue(doc);
       mockFindOne.mockReturnValue({ lean });
       const res = mockRes();
-      await getInternalEvent({ params: { eventId: "evt_x" } }, res);
-      expect(res.json).toHaveBeenCalledWith(doc);
+      await getInternalEvent(
+        { params: { eventId: "evt_x" }, headers: {} },
+        res,
+      );
+      expect(res.json).toHaveBeenCalledWith({
+        ...doc,
+        ticketInventory: null,
+        availabilitySummary: null,
+      });
     });
   });
 

@@ -29,8 +29,92 @@ const sampleEventCancelled = {
   status: "CANCELLED",
 };
 
-/** Inline response/request shapes (not under `components.schemas`). */
 const schemaEvent = { type: "object", description: "Event document (JSON)" };
+const schemaTicketInventoryPayload = {
+  type: "object",
+  description:
+    "Passthrough from Ticket Inventory `GET /inventory/event/{eventId}` (`eventId` + `items`).",
+  properties: {
+    eventId: { type: "string" },
+    items: { type: "array", items: { type: "object" } },
+  },
+};
+const schemaAvailabilitySummaryPayload = {
+  type: "object",
+  description:
+    "Passthrough from Ticket Inventory `GET /inventory/event/{eventId}/availability`.",
+  properties: {
+    eventId: { type: "string" },
+    items: { type: "array", items: { type: "object" } },
+  },
+};
+const schemaTicketDetail = {
+  type: "object",
+  properties: {
+    ticketType: { type: "string", example: "VIP" },
+    price: { type: "number", example: 99.99 },
+    availableQuantity: {
+      type: "integer",
+      example: 42,
+      description: "Seats still available for this category (from inventory).",
+    },
+  },
+};
+const schemaEventDetail = {
+  allOf: [
+    schemaEvent,
+    {
+      type: "object",
+      properties: {
+        tickets: {
+          type: "array",
+          description:
+            "`ticketType`, `price`, and `availableQuantity` per category. Built from Ticket Inventory (`GET .../availability` preferred, else `GET .../inventory/event/{eventId}`). Empty when `INVENTORY_SERVICE_URL` is unset or both calls fail.",
+          items: schemaTicketDetail,
+        },
+      },
+    },
+  ],
+};
+const schemaEventInternalInventory = {
+  allOf: [
+    schemaEvent,
+    {
+      type: "object",
+      properties: {
+        ticketInventory: {
+          oneOf: [schemaTicketInventoryPayload, { type: "null" }],
+        },
+        availabilitySummary: {
+          oneOf: [schemaAvailabilitySummaryPayload, { type: "null" }],
+        },
+      },
+    },
+  ],
+};
+const schemaTicketOffer = {
+  type: "object",
+  properties: {
+    ticketType: { type: "string", example: "VIP" },
+    price: { type: "number", example: 99.99 },
+  },
+};
+const schemaEventListed = {
+  allOf: [
+    schemaEvent,
+    {
+      type: "object",
+      properties: {
+        tickets: {
+          type: "array",
+          description:
+            "Each published event includes `ticketType` and `price` per category from Ticket Inventory (`GET /inventory/event/{eventId}`). Empty array if `INVENTORY_SERVICE_URL` is unset or the call fails.",
+          items: schemaTicketOffer,
+        },
+      },
+    },
+  ],
+};
 const schemaErr = {
   type: "object",
   properties: { message: { type: "string" } },
@@ -101,7 +185,8 @@ export const eventServiceOpenApi = {
       get: {
         tags: ["Events (public)"],
         summary: "List published events",
-        description: "Returns all events with `status: PUBLISHED`.",
+        description:
+          "Returns all events with `status: PUBLISHED`. Each item includes a `tickets` array (`ticketType`, `price`) loaded from the Ticket Inventory Service when configured.",
         operationId: "listPublishedEvents",
         responses: {
           200: {
@@ -110,9 +195,17 @@ export const eventServiceOpenApi = {
               "application/json": {
                 schema: {
                   type: "array",
-                  items: schemaEvent,
+                  items: schemaEventListed,
                 },
-                example: [sampleEvent],
+                example: [
+                  {
+                    ...sampleEvent,
+                    tickets: [
+                      { ticketType: "VIP", price: 150 },
+                      { ticketType: "STANDARD", price: 45 },
+                    ],
+                  },
+                ],
               },
             },
           },
@@ -223,6 +316,8 @@ export const eventServiceOpenApi = {
       get: {
         tags: ["Events (public)"],
         summary: "Get event by ID",
+        description:
+          "Loads the event from this service, then adds a `tickets` array by calling the Ticket Inventory Service at `INVENTORY_SERVICE_URL` (default `http://localhost:8080`): `GET /inventory/event/{eventId}/availability` and `GET /inventory/event/{eventId}`. Response includes only the merged `tickets` list (`ticketType`, `price`, `availableQuantity`), not raw inventory payloads. When inventory is disabled or calls fail, `tickets` is `[]`.",
         operationId: "getEventById",
         parameters: [
           {
@@ -237,8 +332,22 @@ export const eventServiceOpenApi = {
             description: "Event found (any status)",
             content: {
               "application/json": {
-                schema: schemaEvent,
-                example: sampleEvent,
+                schema: schemaEventDetail,
+                example: {
+                  ...sampleEvent,
+                  tickets: [
+                    {
+                      ticketType: "VIP",
+                      price: 150,
+                      availableQuantity: 12,
+                    },
+                    {
+                      ticketType: "STANDARD",
+                      price: 45,
+                      availableQuantity: 200,
+                    },
+                  ],
+                },
               },
             },
           },
@@ -514,7 +623,8 @@ export const eventServiceOpenApi = {
       get: {
         tags: ["Events (authenticated)"],
         summary: "Get event by ID (internal)",
-        description: "Same payload as public get; requires `VIEW_EVENTS`.",
+        description:
+          "Returns the event plus raw Ticket Inventory payloads: `ticketInventory` (`GET /inventory/event/{eventId}`) and `availabilitySummary` (`GET .../availability`). No `tickets` array. Requires `VIEW_EVENTS`.",
         operationId: "getInternalEvent",
         parameters: [
           {
@@ -529,8 +639,59 @@ export const eventServiceOpenApi = {
             description: "Event",
             content: {
               "application/json": {
-                schema: schemaEvent,
-                example: sampleEvent,
+                schema: schemaEventInternalInventory,
+                example: {
+                  ...sampleEvent,
+                  ticketInventory: {
+                    eventId: sampleEvent.eventId,
+                    items: [
+                      {
+                        inventoryId: "inv_e43b9b075511",
+                        eventId: "evt_2bb039cb-ab37-4cb4-b0d0-1e8310613f37",
+                        ticketType: "EARLY_BIRD",
+                        price: 99.99,
+                        totalQuantity: 100,
+                        heldQuantity: 0,
+                        soldQuantity: 0,
+                        availableQuantity: 100,
+                        createdAt: "2026-03-21T10:22:19.361Z",
+                        updatedAt: "2026-03-21T10:22:19.361Z",
+                      },
+                    ],
+                  },
+                  availabilitySummary: {
+                    eventId: sampleEvent.eventId,
+                    items: [
+                      {
+                        inventoryId: "inv_e43b9b075511",
+                        ticketType: "EARLY_BIRD",
+                        price: 99.99,
+                        totalQuantity: 100,
+                        heldQuantity: 0,
+                        soldQuantity: 0,
+                        availableQuantity: 100,
+                      },
+                      {
+                        inventoryId: "inv_525cd2ee4019",
+                        ticketType: "STANDARD",
+                        price: 99.99,
+                        totalQuantity: 100,
+                        heldQuantity: 0,
+                        soldQuantity: 0,
+                        availableQuantity: 100,
+                      },
+                      {
+                        inventoryId: "inv_71183636c8c5",
+                        ticketType: "VIP",
+                        price: 99.99,
+                        totalQuantity: 100,
+                        heldQuantity: 0,
+                        soldQuantity: 0,
+                        availableQuantity: 100,
+                      },
+                    ],
+                  },
+                },
               },
             },
           },
