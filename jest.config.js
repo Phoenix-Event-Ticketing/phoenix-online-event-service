@@ -7,4 +7,7 @@ export default {
   moduleNameMapper: {
     "^(\\.{1,2}/.*)\\.js$": "$1",
   },
+  coverageDirectory: "coverage",
+  coverageReporters: ["lcov", "text", "text-summary"],
+  collectCoverageFrom: ["src/**/*.js"],
 };

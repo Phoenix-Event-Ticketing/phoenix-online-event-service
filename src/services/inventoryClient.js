@@ -2,7 +2,7 @@ const DEFAULT_TIMEOUT_MS = 8000;
 export const LIST_FETCH_TIMEOUT_MS = 5000;
 
 function trimBase(url) {
-  return typeof url === "string" ? url.replace(/\/+$/, "") : "";
+  return typeof url === "string" ? url : "";
 }
 
 async function getJson(root, path, options = {}) {
