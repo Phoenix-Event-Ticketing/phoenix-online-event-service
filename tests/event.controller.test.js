@@ -80,6 +80,15 @@ describe("event.controller", () => {
       expect(mockFind).toHaveBeenCalledWith({});
       expect(res.json).toHaveBeenCalledWith([]);
     });
+
+    it("responds 500 when listing fails", async () => {
+      const lean = jest.fn().mockRejectedValue(new Error("db"));
+      mockFind.mockReturnValue({ lean });
+      const res = mockRes();
+      await listAllEvents({}, res);
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ message: "Internal server error" });
+    });
   });
 
   describe("getEventById", () => {
@@ -98,6 +107,15 @@ describe("event.controller", () => {
       const res = mockRes();
       await getEventById({ params: { eventId: "evt_x" } }, res);
       expect(res.json).toHaveBeenCalledWith(doc);
+    });
+
+    it("responds 500 when find fails", async () => {
+      const lean = jest.fn().mockRejectedValue(new Error("db"));
+      mockFindOne.mockReturnValue({ lean });
+      const res = mockRes();
+      await getEventById({ params: { eventId: "evt_x" } }, res);
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ message: "Internal server error" });
     });
   });
 
