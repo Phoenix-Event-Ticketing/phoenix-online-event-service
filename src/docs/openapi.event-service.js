@@ -1,10 +1,17 @@
-/** OpenAPI 3 document for the Event Service (served by Swagger UI). Models are inline (no `components.schemas`) so Swagger UI does not list a separate Schemas section. */
+const componentRef = (section, name) => ({
+  $ref: `#/components/${section}/${name}`,
+});
 
 const errorMessageSchema = {
   type: "object",
   properties: {
     message: { type: "string" },
   },
+};
+
+const eventStatusSchema = {
+  type: "string",
+  enum: ["DRAFT", "PUBLISHED", "CANCELLED"],
 };
 
 const ticketSummarySchema = {
@@ -14,14 +21,63 @@ const ticketSummarySchema = {
     price: { type: "number" },
     availableQuantity: {
       type: "number",
-      description: "Present on single-event detail when inventory is configured.",
+      description:
+        "Present on single-event detail when inventory is configured.",
     },
   },
 };
 
-const eventStatusSchema = {
-  type: "string",
-  enum: ["DRAFT", "PUBLISHED", "CANCELLED"],
+const eventWritableFieldsSchema = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+    description: { type: "string" },
+    venue: { type: "string" },
+    city: { type: "string" },
+    eventDateTime: { type: "string", format: "date-time" },
+    organizerName: { type: "string" },
+    category: { type: "string" },
+    bannerUrl: {
+      type: "string",
+      description: "Ignored if `banner` file is uploaded (multipart).",
+    },
+  },
+};
+
+const eventCreateBodySchema = {
+  allOf: [
+    eventWritableFieldsSchema,
+    {
+      type: "object",
+      required: [
+        "title",
+        "venue",
+        "city",
+        "eventDateTime",
+        "organizerName",
+        "category",
+      ],
+    },
+  ],
+};
+
+const bannerPartSchema = {
+  type: "object",
+  properties: {
+    banner: {
+      type: "string",
+      format: "binary",
+      description: "Banner image file (JPEG, PNG, GIF, WebP, max 5MB).",
+    },
+  },
+};
+
+const eventCreateMultipartSchema = {
+  allOf: [eventCreateBodySchema, bannerPartSchema],
+};
+
+const eventUpdateMultipartSchema = {
+  allOf: [eventWritableFieldsSchema, bannerPartSchema],
 };
 
 const eventSchema = {
@@ -52,70 +108,6 @@ const eventSchema = {
   },
 };
 
-const eventCreateBodySchema = {
-  type: "object",
-  required: [
-    "title",
-    "venue",
-    "city",
-    "eventDateTime",
-    "organizerName",
-    "category",
-  ],
-  properties: {
-    title: { type: "string" },
-    description: { type: "string" },
-    venue: { type: "string" },
-    city: { type: "string" },
-    eventDateTime: { type: "string", format: "date-time" },
-    organizerName: { type: "string" },
-    category: { type: "string" },
-    bannerUrl: { type: "string", description: "Ignored if `banner` file is uploaded." },
-  },
-};
-
-const eventCreateMultipartSchema = {
-  allOf: [
-    eventCreateBodySchema,
-    {
-      type: "object",
-      properties: {
-        banner: {
-          type: "string",
-          format: "binary",
-          description: "Banner image file (JPEG, PNG, GIF, WebP, max 5MB).",
-        },
-      },
-    },
-  ],
-};
-
-const eventUpdateBodySchema = {
-  type: "object",
-  properties: {
-    title: { type: "string" },
-    description: { type: "string" },
-    venue: { type: "string" },
-    city: { type: "string" },
-    eventDateTime: { type: "string", format: "date-time" },
-    organizerName: { type: "string" },
-    category: { type: "string" },
-    bannerUrl: { type: "string" },
-  },
-};
-
-const eventUpdateMultipartSchema = {
-  allOf: [
-    eventUpdateBodySchema,
-    {
-      type: "object",
-      properties: {
-        banner: { type: "string", format: "binary" },
-      },
-    },
-  ],
-};
-
 const internalEventDetailSchema = {
   allOf: [
     eventSchema,
@@ -130,13 +122,52 @@ const internalEventDetailSchema = {
   ],
 };
 
-const errorJsonContent = {
+const jsonErrorResponse = (description) => ({
+  description,
   content: {
     "application/json": {
       schema: errorMessageSchema,
     },
   },
-};
+});
+
+const jsonResponseWithSchema = (description, schema) => ({
+  description,
+  content: {
+    "application/json": {
+      schema,
+    },
+  },
+});
+
+const jsonArrayResponse = (description, itemSchema) => ({
+  description,
+  content: {
+    "application/json": {
+      schema: {
+        type: "array",
+        items: itemSchema,
+      },
+    },
+  },
+});
+
+const patchEventSubresource = (summary, description) => ({
+  patch: {
+    tags: ["Events"],
+    summary,
+    description,
+    security: [{ bearerAuth: [] }],
+    parameters: [componentRef("parameters", "eventId")],
+    responses: {
+      200: componentRef("responses", "EventOne"),
+      401: componentRef("responses", "Unauthorized"),
+      403: componentRef("responses", "Forbidden"),
+      404: componentRef("responses", "NotFound"),
+      500: componentRef("responses", "ServerError"),
+    },
+  },
+});
 
 export const eventServiceOpenApi = {
   openapi: "3.0.3",
@@ -148,11 +179,7 @@ export const eventServiceOpenApi = {
       "Protected routes expect a JWT in `Authorization: Bearer <token>` with a `permissions` array claim.",
   },
   servers: [{ url: "/", description: "Same origin as this service" }],
-  tags: [
-    { name: "Health" },
-    { name: "Events" },
-    { name: "Internal" },
-  ],
+  tags: [{ name: "Health" }, { name: "Events" }, { name: "Internal" }],
   components: {
     securitySchemes: {
       bearerAuth: {
@@ -172,26 +199,13 @@ export const eventServiceOpenApi = {
       },
     },
     responses: {
-      BadRequest: {
-        description: "Bad request (validation or upload)",
-        ...errorJsonContent,
-      },
-      Unauthorized: {
-        description: "Missing or invalid JWT",
-        ...errorJsonContent,
-      },
-      Forbidden: {
-        description: "Forbidden — JWT lacks the required permission for this operation",
-        ...errorJsonContent,
-      },
-      NotFound: {
-        description: "Resource not found",
-        ...errorJsonContent,
-      },
-      ServerError: {
-        description: "Server error",
-        ...errorJsonContent,
-      },
+      BadRequest: jsonErrorResponse("Bad request (validation or upload)"),
+      Unauthorized: jsonErrorResponse("Missing or invalid JWT"),
+      Forbidden: jsonErrorResponse(
+        "Forbidden — JWT lacks the required permission for this operation",
+      ),
+      NotFound: jsonErrorResponse("Resource not found"),
+      ServerError: jsonErrorResponse("Server error"),
       HealthOk: {
         description: "Service is up",
         content: {
@@ -206,41 +220,13 @@ export const eventServiceOpenApi = {
           },
         },
       },
-      EventList: {
-        description: "JSON array of events",
-        content: {
-          "application/json": {
-            schema: {
-              type: "array",
-              items: eventSchema,
-            },
-          },
-        },
-      },
-      EventOne: {
-        description: "Single event document",
-        content: {
-          "application/json": {
-            schema: eventSchema,
-          },
-        },
-      },
-      EventCreated: {
-        description: "Created",
-        content: {
-          "application/json": {
-            schema: eventSchema,
-          },
-        },
-      },
-      InternalEventOne: {
-        description: "Event with inventory sidecars",
-        content: {
-          "application/json": {
-            schema: internalEventDetailSchema,
-          },
-        },
-      },
+      EventList: jsonArrayResponse("JSON array of events", eventSchema),
+      EventOne: jsonResponseWithSchema("Single event document", eventSchema),
+      EventCreated: jsonResponseWithSchema("Created", eventSchema),
+      InternalEventOne: jsonResponseWithSchema(
+        "Event with inventory sidecars",
+        internalEventDetailSchema,
+      ),
     },
   },
   paths: {
@@ -249,7 +235,7 @@ export const eventServiceOpenApi = {
         tags: ["Health"],
         summary: "Liveness / health check",
         responses: {
-          "200": { $ref: "#/components/responses/HealthOk" },
+          200: componentRef("responses", "HealthOk"),
         },
       },
     },
@@ -260,8 +246,8 @@ export const eventServiceOpenApi = {
         description:
           "Returns events with `status: PUBLISHED`. Ticket summaries are merged from the inventory service when configured.",
         responses: {
-          "200": { $ref: "#/components/responses/EventList" },
-          "500": { $ref: "#/components/responses/ServerError" },
+          200: componentRef("responses", "EventList"),
+          500: componentRef("responses", "ServerError"),
         },
       },
       post: {
@@ -282,11 +268,11 @@ export const eventServiceOpenApi = {
           },
         },
         responses: {
-          "201": { $ref: "#/components/responses/EventCreated" },
-          "400": { $ref: "#/components/responses/BadRequest" },
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": { $ref: "#/components/responses/Forbidden" },
-          "500": { $ref: "#/components/responses/ServerError" },
+          201: componentRef("responses", "EventCreated"),
+          400: componentRef("responses", "BadRequest"),
+          401: componentRef("responses", "Unauthorized"),
+          403: componentRef("responses", "Forbidden"),
+          500: componentRef("responses", "ServerError"),
         },
       },
     },
@@ -294,11 +280,11 @@ export const eventServiceOpenApi = {
       get: {
         tags: ["Events"],
         summary: "Get event by id (public detail)",
-        parameters: [{ $ref: "#/components/parameters/eventId" }],
+        parameters: [componentRef("parameters", "eventId")],
         responses: {
-          "200": { $ref: "#/components/responses/EventOne" },
-          "404": { $ref: "#/components/responses/NotFound" },
-          "500": { $ref: "#/components/responses/ServerError" },
+          200: componentRef("responses", "EventOne"),
+          404: componentRef("responses", "NotFound"),
+          500: componentRef("responses", "ServerError"),
         },
       },
       put: {
@@ -306,12 +292,12 @@ export const eventServiceOpenApi = {
         summary: "Update event",
         description: "Requires `UPDATE_EVENT`. Same body options as create.",
         security: [{ bearerAuth: [] }],
-        parameters: [{ $ref: "#/components/parameters/eventId" }],
+        parameters: [componentRef("parameters", "eventId")],
         requestBody: {
           required: false,
           content: {
             "application/json": {
-              schema: eventUpdateBodySchema,
+              schema: eventWritableFieldsSchema,
             },
             "multipart/form-data": {
               schema: eventUpdateMultipartSchema,
@@ -319,47 +305,23 @@ export const eventServiceOpenApi = {
           },
         },
         responses: {
-          "200": { $ref: "#/components/responses/EventOne" },
-          "400": { $ref: "#/components/responses/BadRequest" },
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": { $ref: "#/components/responses/Forbidden" },
-          "404": { $ref: "#/components/responses/NotFound" },
-          "500": { $ref: "#/components/responses/ServerError" },
+          200: componentRef("responses", "EventOne"),
+          400: componentRef("responses", "BadRequest"),
+          401: componentRef("responses", "Unauthorized"),
+          403: componentRef("responses", "Forbidden"),
+          404: componentRef("responses", "NotFound"),
+          500: componentRef("responses", "ServerError"),
         },
       },
     },
-    "/api/v1/events/{eventId}/publish": {
-      patch: {
-        tags: ["Events"],
-        summary: "Publish event",
-        description: "Requires `PUBLISH_EVENT`. Sets status to PUBLISHED.",
-        security: [{ bearerAuth: [] }],
-        parameters: [{ $ref: "#/components/parameters/eventId" }],
-        responses: {
-          "200": { $ref: "#/components/responses/EventOne" },
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": { $ref: "#/components/responses/Forbidden" },
-          "404": { $ref: "#/components/responses/NotFound" },
-          "500": { $ref: "#/components/responses/ServerError" },
-        },
-      },
-    },
-    "/api/v1/events/{eventId}/cancel": {
-      patch: {
-        tags: ["Events"],
-        summary: "Cancel event",
-        description: "Requires `UPDATE_EVENT`. Sets status to CANCELLED.",
-        security: [{ bearerAuth: [] }],
-        parameters: [{ $ref: "#/components/parameters/eventId" }],
-        responses: {
-          "200": { $ref: "#/components/responses/EventOne" },
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": { $ref: "#/components/responses/Forbidden" },
-          "404": { $ref: "#/components/responses/NotFound" },
-          "500": { $ref: "#/components/responses/ServerError" },
-        },
-      },
-    },
+    "/api/v1/events/{eventId}/publish": patchEventSubresource(
+      "Publish event",
+      "Requires `PUBLISH_EVENT`. Sets status to PUBLISHED.",
+    ),
+    "/api/v1/events/{eventId}/cancel": patchEventSubresource(
+      "Cancel event",
+      "Requires `UPDATE_EVENT`. Sets status to CANCELLED.",
+    ),
     "/api/v1/events/internal/events": {
       get: {
         tags: ["Internal"],
@@ -367,10 +329,10 @@ export const eventServiceOpenApi = {
         description: "Requires `VIEW_EVENTS`.",
         security: [{ bearerAuth: [] }],
         responses: {
-          "200": { $ref: "#/components/responses/EventList" },
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": { $ref: "#/components/responses/Forbidden" },
-          "500": { $ref: "#/components/responses/ServerError" },
+          200: componentRef("responses", "EventList"),
+          401: componentRef("responses", "Unauthorized"),
+          403: componentRef("responses", "Forbidden"),
+          500: componentRef("responses", "ServerError"),
         },
       },
     },
@@ -381,13 +343,13 @@ export const eventServiceOpenApi = {
         description:
           "Requires `VIEW_EVENTS`. Includes `ticketInventory` and `availabilitySummary` when inventory URL is configured.",
         security: [{ bearerAuth: [] }],
-        parameters: [{ $ref: "#/components/parameters/eventId" }],
+        parameters: [componentRef("parameters", "eventId")],
         responses: {
-          "200": { $ref: "#/components/responses/InternalEventOne" },
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": { $ref: "#/components/responses/Forbidden" },
-          "404": { $ref: "#/components/responses/NotFound" },
-          "500": { $ref: "#/components/responses/ServerError" },
+          200: componentRef("responses", "InternalEventOne"),
+          401: componentRef("responses", "Unauthorized"),
+          403: componentRef("responses", "Forbidden"),
+          404: componentRef("responses", "NotFound"),
+          500: componentRef("responses", "ServerError"),
         },
       },
     },
