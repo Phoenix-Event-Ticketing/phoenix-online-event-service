@@ -172,6 +172,17 @@ describe("event.controller", () => {
         availabilitySummary: null,
       });
     });
+
+    it("responds 500 when loading sidecars fails", async () => {
+      const lean = jest.fn().mockRejectedValue(new Error("db"));
+      mockFindOne.mockReturnValue({ lean });
+      const res = mockRes();
+      await getInternalEvent(
+        { params: { eventId: "evt_x" }, headers: {} },
+        res,
+      );
+      expect(res.status).toHaveBeenCalledWith(500);
+    });
   });
 
   describe("createEvent", () => {
@@ -272,6 +283,16 @@ describe("event.controller", () => {
       );
       expect(res.json).toHaveBeenCalledWith(updated);
     });
+
+    it("responds 500 when update fails", async () => {
+      mockFindOneAndUpdate.mockRejectedValue(new Error("db"));
+      const res = mockRes();
+      await updateEvent(
+        { params: { eventId: "evt_x" }, body: { title: "N" } },
+        res,
+      );
+      expect(res.status).toHaveBeenCalledWith(500);
+    });
   });
 
   describe("publishEvent", () => {
@@ -305,6 +326,13 @@ describe("event.controller", () => {
       const res = mockRes();
       await cancelEvent({ params: { eventId: "evt_x" } }, res);
       expect(res.json).toHaveBeenCalledWith(updated);
+    });
+
+    it("responds 500 when cancel fails", async () => {
+      mockFindOneAndUpdate.mockRejectedValue(new Error("db"));
+      const res = mockRes();
+      await cancelEvent({ params: { eventId: "evt_x" } }, res);
+      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 });
