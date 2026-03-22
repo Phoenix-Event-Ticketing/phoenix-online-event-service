@@ -35,6 +35,41 @@ function prepareEventBody(body) {
   return data;
 }
 
+function isUploadRelatedError(err) {
+  return (
+    err.message?.includes("Cloudinary") ||
+    err.message?.includes("Invalid file type")
+  );
+}
+
+function respondAfterWriteFailure(req, res, operation, err) {
+  const failVerb =
+    operation === "create_event" ? "create event" : "update event";
+  logHttp({
+    level: "error",
+    req,
+    res,
+    operation,
+    message: `Failed to ${failVerb}`,
+    metadata: { error: err.message },
+  });
+  return res
+    .status(isUploadRelatedError(err) ? 400 : 500)
+    .json({ message: err.message || "Internal server error" });
+}
+
+function respondWithServerError(req, res, operation, err, failureMessage) {
+  logHttp({
+    level: "error",
+    req,
+    res,
+    operation,
+    message: failureMessage,
+    metadata: { error: err.message },
+  });
+  return res.status(500).json({ message: "Internal server error" });
+}
+
 async function loadInventorySidecars(eventId, req) {
   if (!env.inventoryServiceUrl) {
     return { ticketInventory: null, availabilitySummary: null };
@@ -54,6 +89,54 @@ async function loadTicketsForEventDetail(eventId, req) {
   const { ticketInventory, availabilitySummary } =
     await loadInventorySidecars(eventId, req);
   return ticketsFromDetailSidecars(ticketInventory, availabilitySummary);
+}
+
+async function updateEventStatus(req, res, nextStatus, labels) {
+  const { eventId } = req.params;
+  const {
+    operation,
+    startMessage,
+    notFoundMessage,
+    successMessage,
+    failureMessage,
+  } = labels;
+  try {
+    logHttp({
+      level: "info",
+      req,
+      res,
+      operation,
+      message: startMessage,
+      metadata: { eventId },
+    });
+    const updated = await Event.findOneAndUpdate(
+      { eventId },
+      { status: nextStatus },
+      { new: true },
+    );
+    if (!updated) {
+      logHttp({
+        level: "info",
+        req,
+        res,
+        operation,
+        message: notFoundMessage,
+        metadata: { eventId },
+      });
+      return res.status(404).json({ message: "Event not found" });
+    }
+    logHttp({
+      level: "info",
+      req,
+      res,
+      operation,
+      message: successMessage,
+      metadata: { eventId },
+    });
+    return res.json(updated);
+  } catch (err) {
+    return respondWithServerError(req, res, operation, err, failureMessage);
+  }
 }
 
 export async function createEvent(req, res) {
@@ -92,20 +175,7 @@ export async function createEvent(req, res) {
 
     return res.status(201).json(event);
   } catch (err) {
-    const isUploadError =
-      err.message?.includes("Cloudinary") ||
-      err.message?.includes("Invalid file type");
-    logHttp({
-      level: "error",
-      req,
-      res,
-      operation: "create_event",
-      message: "Failed to create event",
-      metadata: { error: err.message },
-    });
-    return res
-      .status(isUploadError ? 400 : 500)
-      .json({ message: err.message || "Internal server error" });
+    return respondAfterWriteFailure(req, res, "create_event", err);
   }
 }
 
@@ -142,15 +212,13 @@ export async function listEvents(req, res) {
     });
     return res.json(enriched);
   } catch (err) {
-    logHttp({
-      level: "error",
+    return respondWithServerError(
       req,
       res,
-      operation: "list_events",
-      message: "Failed to list events",
-      metadata: { error: err.message },
-    });
-    return res.status(500).json({ message: "Internal server error" });
+      "list_events",
+      err,
+      "Failed to list events",
+    );
   }
 }
 
@@ -166,15 +234,13 @@ export async function listAllEvents(req, res) {
     const events = await Event.find({}).lean();
     return res.json(events);
   } catch (err) {
-    logHttp({
-      level: "error",
+    return respondWithServerError(
       req,
       res,
-      operation: "list_all_events",
-      message: "Failed to list all events",
-      metadata: { error: err.message },
-    });
-    return res.status(500).json({ message: "Internal server error" });
+      "list_all_events",
+      err,
+      "Failed to list all events",
+    );
   }
 }
 
@@ -196,15 +262,13 @@ export async function getEventById(req, res) {
     const tickets = await loadTicketsForEventDetail(eventId, req);
     return res.json({ ...event, tickets });
   } catch (err) {
-    logHttp({
-      level: "error",
+    return respondWithServerError(
       req,
       res,
-      operation: "get_event_by_id",
-      message: "Failed to fetch event",
-      metadata: { error: err.message },
-    });
-    return res.status(500).json({ message: "Internal server error" });
+      "get_event_by_id",
+      err,
+      "Failed to fetch event",
+    );
   }
 }
 
@@ -234,15 +298,13 @@ export async function getInternalEvent(req, res) {
     const sidecars = await loadInventorySidecars(eventId, req);
     return res.json({ ...event, ...sidecars });
   } catch (err) {
-    logHttp({
-      level: "error",
+    return respondWithServerError(
       req,
       res,
-      operation: "get_internal_event",
-      message: "Failed to fetch internal event",
-      metadata: { error: err.message },
-    });
-    return res.status(500).json({ message: "Internal server error" });
+      "get_internal_event",
+      err,
+      "Failed to fetch internal event",
+    );
   }
 }
 
@@ -282,117 +344,26 @@ export async function updateEvent(req, res) {
     }
     return res.json(updated);
   } catch (err) {
-    const isUploadError =
-      err.message?.includes("Cloudinary") ||
-      err.message?.includes("Invalid file type");
-    logHttp({
-      level: "error",
-      req,
-      res,
-      operation: "update_event",
-      message: "Failed to update event",
-      metadata: { error: err.message },
-    });
-    return res
-      .status(isUploadError ? 400 : 500)
-      .json({ message: err.message || "Internal server error" });
+    return respondAfterWriteFailure(req, res, "update_event", err);
   }
 }
 
 export async function publishEvent(req, res) {
-  try {
-    const { eventId } = req.params;
-    logHttp({
-      level: "info",
-      req,
-      res,
-      operation: "publish_event",
-      message: "Publishing event",
-      metadata: { eventId },
-    });
-    const updated = await Event.findOneAndUpdate(
-      { eventId },
-      { status: "PUBLISHED" },
-      { new: true },
-    );
-    if (!updated) {
-      logHttp({
-        level: "info",
-        req,
-        res,
-        operation: "publish_event",
-        message: "Event to publish not found",
-        metadata: { eventId },
-      });
-      return res.status(404).json({ message: "Event not found" });
-    }
-    logHttp({
-      level: "info",
-      req,
-      res,
-      operation: "publish_event",
-      message: "Event published",
-      metadata: { eventId },
-    });
-    return res.json(updated);
-  } catch (err) {
-    logHttp({
-      level: "error",
-      req,
-      res,
-      operation: "publish_event",
-      message: "Failed to publish event",
-      metadata: { error: err.message },
-    });
-    return res.status(500).json({ message: "Internal server error" });
-  }
+  return updateEventStatus(req, res, "PUBLISHED", {
+    operation: "publish_event",
+    startMessage: "Publishing event",
+    notFoundMessage: "Event to publish not found",
+    successMessage: "Event published",
+    failureMessage: "Failed to publish event",
+  });
 }
 
 export async function cancelEvent(req, res) {
-  try {
-    const { eventId } = req.params;
-    logHttp({
-      level: "info",
-      req,
-      res,
-      operation: "cancel_event",
-      message: "Cancelling event",
-      metadata: { eventId },
-    });
-    const updated = await Event.findOneAndUpdate(
-      { eventId },
-      { status: "CANCELLED" },
-      { new: true },
-    );
-    if (!updated) {
-      logHttp({
-        level: "info",
-        req,
-        res,
-        operation: "cancel_event",
-        message: "Event to cancel not found",
-        metadata: { eventId },
-      });
-      return res.status(404).json({ message: "Event not found" });
-    }
-    logHttp({
-      level: "info",
-      req,
-      res,
-      operation: "cancel_event",
-      message: "Event cancelled",
-      metadata: { eventId },
-    });
-    return res.json(updated);
-  } catch (err) {
-    logHttp({
-      level: "error",
-      req,
-      res,
-      operation: "cancel_event",
-      message: "Failed to cancel event",
-      metadata: { error: err.message },
-    });
-    return res.status(500).json({ message: "Internal server error" });
-  }
+  return updateEventStatus(req, res, "CANCELLED", {
+    operation: "cancel_event",
+    startMessage: "Cancelling event",
+    notFoundMessage: "Event to cancel not found",
+    successMessage: "Event cancelled",
+    failureMessage: "Failed to cancel event",
+  });
 }
