@@ -24,7 +24,13 @@ export function createApp() {
     next();
   });
 
-  app.use("/api/v1/events/docs", swaggerUi.serve, swaggerUi.setup(eventServiceOpenApi));
+  app.use(
+    "/api/v1/events/docs",
+    swaggerUi.serve,
+    swaggerUi.setup(eventServiceOpenApi, {
+      defaultModelsExpandDepth: -1,
+    }),
+  );
   app.use("/api/v1/events", eventRouter);
 
   app.get("/health", (req, res) => {
