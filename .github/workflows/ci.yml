@@ -123,11 +123,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download coverage artifact
-        uses: actions/download-artifact@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          name: coverage-report
-          path: .
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate coverage for Sonar
+        run: npm run test:coverage
 
       - name: Set Sonar Quality Gate mode
         id: sonar_qg
@@ -144,5 +150,6 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
             -Dsonar.qualitygate.wait=${{ steps.sonar_qg.outputs.wait }}
             -Dsonar.qualitygate.timeout=300
