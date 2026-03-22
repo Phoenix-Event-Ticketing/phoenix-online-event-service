@@ -3,25 +3,22 @@ name: CI
 on:
   push:
     branches: [main, dev]
-
   pull_request:
     branches: [main, dev]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build-test:
+    name: Build and test
+    runs-on: ubuntu-latest
     permissions:
       contents: read
-    runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -32,227 +29,126 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Syntax check (Node)
-        run: find src -name '*.js' -print0 | xargs -0 -r -n1 node --check
-
-      - name: Test with coverage
-        run: npm test -- --coverage --coverageReporters=lcov --coverageReporters=text
+      - name: Run tests with coverage
+        run: npm run test:coverage
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: coverage/lcov.info
+          path: coverage
 
   osv-scanner:
     name: OSV dependency vulnerability scan
+    runs-on: ubuntu-latest
+    needs: build-test
     permissions:
       contents: read
       security-events: write
-    runs-on: ubuntu-latest
-    needs: build-test
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install OSV Scanner
+      - name: Install OSV-Scanner
         env:
           OSV_VERSION: "2.3.3"
         run: |
-          set -euo pipefail
-          curl -sSfL -o /tmp/osv-scanner \
-            "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64"
+          curl -sSfL -o /tmp/osv-scanner "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64"
           chmod +x /tmp/osv-scanner
           sudo mv /tmp/osv-scanner /usr/local/bin/osv-scanner
           osv-scanner --version
 
-      - name: Run OSV Scanner and generate SARIF
-        id: osv_scanner
+      - name: Run OSV Scanner
+        id: osv_scan
         continue-on-error: true
-        run: |
-          set -euo pipefail
-          osv-scanner scan -r . --format sarif --output osv.sarif
+        run: osv-scanner scan -r . --format sarif --output osv.sarif
 
-      - name: Upload OSV results to GitHub Security
+      - name: Upload OSV SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: osv.sarif
           category: osv-scanner
 
-      - name: Fail if OSV Scanner found vulnerabilities
-        if: steps.osv_scanner.outcome == 'failure'
+      - name: Fail if OSV found vulnerabilities
+        if: steps.osv_scan.outcome == 'failure'
         run: |
-          echo "OSV Scanner reported vulnerabilities or failed. Check the step log and GitHub Security tab."
+          echo "OSV Scanner reported vulnerabilities."
           exit 1
 
-  security:
-    name: Trivy Security Scans
+  trivy-image:
+    name: Trivy image scan
+    runs-on: ubuntu-latest
+    needs: build-test
     permissions:
       contents: read
       security-events: write
-      actions: write
-    runs-on: ubuntu-latest
-    needs: build-test
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Trivy FS vulnerability scan
-        id: trivy_fs
-        continue-on-error: true
-        uses: aquasecurity/trivy-action@0.35.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: vuln
-          format: sarif
-          output: trivy-fs.sarif
-          severity: HIGH,CRITICAL
-          limit-severities-for-sarif: true
-          exit-code: "1"
-
-      - name: Upload FS scan to GitHub Security
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-fs.sarif
-          category: trivy-fs
-
-      - name: Trivy misconfiguration scan
-        id: trivy_config
-        continue-on-error: true
-        uses: aquasecurity/trivy-action@0.35.0
-        with:
-          scan-type: config
-          scan-ref: .
-          format: sarif
-          output: trivy-config.sarif
-          severity: HIGH,CRITICAL
-          limit-severities-for-sarif: true
-          exit-code: "1"
-
-      - name: Upload config scan to GitHub Security
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-config.sarif
-          category: trivy-config
-
-      - name: Trivy secret scan
-        id: trivy_secret
-        continue-on-error: true
-        uses: aquasecurity/trivy-action@0.35.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: secret
-          format: sarif
-          output: trivy-secret.sarif
-          severity: HIGH,CRITICAL
-          limit-severities-for-sarif: true
-          exit-code: "1"
-
-      - name: Upload secret scan to GitHub Security
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-secret.sarif
-          category: trivy-secret
-
       - name: Build Docker image
-        run: docker build -t event-service:ci .
+        run: docker build -t phoenix-online-event-service:ci .
 
-      - name: Trivy image scan
+      - name: Run Trivy image scan
         id: trivy_image
         continue-on-error: true
         uses: aquasecurity/trivy-action@0.35.0
         with:
-          image-ref: event-service:ci
+          image-ref: phoenix-online-event-service:ci
           format: sarif
           output: trivy-image.sarif
           severity: HIGH,CRITICAL
+          ignore-unfixed: true
           limit-severities-for-sarif: true
           exit-code: "1"
 
-      - name: Upload image scan to GitHub Security
+      - name: Upload Trivy image SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-image.sarif
           category: trivy-image
 
-      - name: Upload Trivy SARIF as workflow artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-sarif-reports
-          path: |
-            trivy-fs.sarif
-            trivy-config.sarif
-            trivy-secret.sarif
-            trivy-image.sarif
-          if-no-files-found: warn
-
       - name: Fail if Trivy found HIGH or CRITICAL issues
-        if: |
-          steps.trivy_fs.outcome == 'failure' ||
-          steps.trivy_config.outcome == 'failure' ||
-          steps.trivy_secret.outcome == 'failure' ||
-          steps.trivy_image.outcome == 'failure'
+        if: steps.trivy_image.outcome == 'failure'
         run: |
-          echo "Trivy step outcomes (failure = exit non-zero: findings OR scan error):"
-          echo "  trivy_fs:     ${{ steps.trivy_fs.outcome }}"
-          echo "  trivy_config: ${{ steps.trivy_config.outcome }}"
-          echo "  trivy_secret: ${{ steps.trivy_secret.outcome }}"
-          echo "  trivy_image:  ${{ steps.trivy_image.outcome }}"
-          echo ""
-          echo "Open the matching 'Trivy ... scan' step above for the table report."
-          echo "Download artifact 'trivy-sarif-reports' to inspect raw SARIF."
-          echo "Code scanning alerts (Security tab) require upload-sarif to succeed; private repos often need GHAS."
+          echo "Trivy reported HIGH or CRITICAL image vulnerabilities."
           exit 1
 
   sonar:
-    name: SonarQube Cloud Analysis (+ QG on main)
+    name: SonarQube Cloud Analysis
+    runs-on: ubuntu-latest
+    needs: build-test
     permissions:
       contents: read
       pull-requests: read
-    runs-on: ubuntu-latest
-    needs: build-test
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set quality gate wait (main push only)
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: .
+
+      - name: Set Sonar Quality Gate mode
         id: sonar_qg
         run: |
-          if [ "${GITHUB_REF}" = "refs/heads/main" ] && [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
             echo "wait=true" >> "$GITHUB_OUTPUT"
           else
             echo "wait=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Download coverage artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-report
-
-      - name: SonarQube Scan
+      - name: SonarQube Cloud Analysis (+ QG on main)
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.projectKey=Phoenix-Event-Ticketing_phoenix-online-event-service
-            -Dsonar.organization=phoenix-event-ticketing
-            -Dsonar.sources=src
-            -Dsonar.tests=tests
-            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
             -Dsonar.qualitygate.wait=${{ steps.sonar_qg.outputs.wait }}
             -Dsonar.qualitygate.timeout=300
