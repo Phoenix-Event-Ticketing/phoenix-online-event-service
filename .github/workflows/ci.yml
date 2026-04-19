@@ -153,3 +153,116 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
             -Dsonar.qualitygate.wait=${{ steps.sonar_qg.outputs.wait }}
             -Dsonar.qualitygate.timeout=300
+
+  push-image:
+    name: Push Docker image to Artifact Registry
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    needs: [osv-scanner, trivy-image, sonar]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_ARTIFACT_REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
+      GCP_IMAGE_NAME: ${{ vars.GCP_IMAGE_NAME }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push image
+        run: |
+          set -euo pipefail
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REGISTRY}/${GCP_IMAGE_NAME}"
+          docker build -t "${IMAGE}:${GITHUB_SHA}" .
+          docker push "${IMAGE}:${GITHUB_SHA}"
+          if [ "${GITHUB_REF_NAME}" = "dev" ]; then
+            docker tag "${IMAGE}:${GITHUB_SHA}" "${IMAGE}:dev-latest"
+            docker push "${IMAGE}:dev-latest"
+          fi
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            docker tag "${IMAGE}:${GITHUB_SHA}" "${IMAGE}:main-latest"
+            docker push "${IMAGE}:main-latest"
+          fi
+
+  gitops-update:
+    name: Update GitOps config (event-service image)
+    runs-on: ubuntu-latest
+    needs: push-image
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    permissions:
+      contents: read
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_ARTIFACT_REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
+      GCP_IMAGE_NAME: ${{ vars.GCP_IMAGE_NAME }}
+      GITOPS_KUSTOMIZE_IMAGE_NAME: ${{ vars.GITOPS_KUSTOMIZE_IMAGE_NAME }}
+
+    steps:
+      - name: Install kustomize and yq
+        env:
+          KUSTOMIZE_VERSION: "5.5.0"
+          YQ_VERSION: "v4.44.3"
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
+            | tar -xzC /tmp
+          sudo mv /tmp/kustomize /usr/local/bin/kustomize
+          curl -fsSL -o /tmp/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          sudo mv /tmp/yq /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+          kustomize version
+          yq --version
+
+      - name: Checkout platform config
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_REPO_PAT }}
+          ref: main
+          path: gitops-repo
+
+      - name: Bump event-service image in Kustomize overlay
+        run: |
+          set -euo pipefail
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REGISTRY}/${GCP_IMAGE_NAME}"
+          KUSTOMIZE_IMAGE_NAME="${GITOPS_KUSTOMIZE_IMAGE_NAME:-${IMAGE}}"
+          case "${GITHUB_REF_NAME}" in
+            dev) OVERLAY_ENV=dev ;;
+            main) OVERLAY_ENV=prod ;;
+            *) echo "Unexpected ref: ${GITHUB_REF_NAME}"; exit 1 ;;
+          esac
+          OVERLAY_DIR="gitops-repo/apps/event-service/overlays/${OVERLAY_ENV}"
+          cd "${OVERLAY_DIR}"
+          export TAG="${GITHUB_SHA}"
+          export IMG_NAME="${KUSTOMIZE_IMAGE_NAME}"
+          yq e -i '(.images[] | select(.name == strenv(IMG_NAME))).newTag = strenv(TAG)' kustomization.yaml
+          sed -i '/^    newName:/d' kustomization.yaml
+          kustomize build . >/dev/null
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          cd gitops-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u apps/event-service/overlays/
+          if git diff --cached --quiet; then
+            echo "No kustomization changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(event-service): bump image tag to ${GITHUB_SHA:0:7}"
+          git push origin HEAD:main
