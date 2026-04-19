@@ -175,14 +175,7 @@ jobs:
         run: |
           set -euo pipefail
           missing=()
-          # Strip CR/LF and leading/trailing whitespace (whitespace-only counts as missing).
-          trim() {
-            local s
-            s="$(printf '%s' "${1:-}" | tr -d '\r\n')"
-            s="${s#"${s%%[![:space:]]*}"}"
-            s="${s%"${s##*[![:space:]]}"}"
-            printf '%s' "$s"
-          }
+          trim() { printf '%s' "${1:-}" | tr -d '\r\n'; }
           [ -z "$(trim "${GCP_PROJECT_ID:-}")" ] && missing+=("GCP_PROJECT_ID")
           [ -z "$(trim "${GCP_REGION:-}")" ] && missing+=("GCP_REGION")
           [ -z "$(trim "${GCP_ARTIFACT_REGISTRY:-}")" ] && missing+=("GCP_ARTIFACT_REGISTRY")
@@ -191,7 +184,6 @@ jobs:
             echo "ERROR: Missing or empty GitHub Actions repository variables: ${missing[*]}"
             echo "Add them under: Settings > Secrets and variables > Actions > Variables"
             echo "Required: GCP_PROJECT_ID, GCP_REGION, GCP_ARTIFACT_REGISTRY, GCP_IMAGE_NAME"
-            echo "GCP_REGION must be the Artifact Registry location ID (e.g. us-central1), not the full hostname."
             exit 1
           fi
 
@@ -207,29 +199,15 @@ jobs:
         run: |
           set -euo pipefail
           GCP_REGION="$(printf '%s' "$GCP_REGION" | tr -d '\r\n')"
-          GCP_REGION="${GCP_REGION#"${GCP_REGION%%[![:space:]]*}"}"
-          GCP_REGION="${GCP_REGION%"${GCP_REGION##*[![:space:]]}"}"
-          if [ -z "$GCP_REGION" ]; then
-            echo "GCP_REGION is empty; gcloud would receive the invalid hostname '-docker.pkg.dev'."
-            echo "Set repository variable GCP_REGION to your registry region (e.g. us-central1)."
-            exit 1
-          fi
           gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
 
       - name: Build and push image
         run: |
           set -euo pipefail
-          strip_crlf_ws() {
-            local s
-            s="$(printf '%s' "${1:-}" | tr -d '\r\n')"
-            s="${s#"${s%%[![:space:]]*}"}"
-            s="${s%"${s##*[![:space:]]}"}"
-            printf '%s' "$s"
-          }
-          GCP_REGION="$(strip_crlf_ws "$GCP_REGION")"
-          GCP_PROJECT_ID="$(strip_crlf_ws "$GCP_PROJECT_ID")"
-          GCP_ARTIFACT_REGISTRY="$(strip_crlf_ws "$GCP_ARTIFACT_REGISTRY")"
-          GCP_IMAGE_NAME="$(strip_crlf_ws "$GCP_IMAGE_NAME")"
+          GCP_REGION="$(printf '%s' "$GCP_REGION" | tr -d '\r\n')"
+          GCP_PROJECT_ID="$(printf '%s' "$GCP_PROJECT_ID" | tr -d '\r\n')"
+          GCP_ARTIFACT_REGISTRY="$(printf '%s' "$GCP_ARTIFACT_REGISTRY" | tr -d '\r\n')"
+          GCP_IMAGE_NAME="$(printf '%s' "$GCP_IMAGE_NAME" | tr -d '\r\n')"
           IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REGISTRY}/${GCP_IMAGE_NAME}"
           docker build -t "${IMAGE}:${GITHUB_SHA}" .
           docker push "${IMAGE}:${GITHUB_SHA}"
@@ -283,18 +261,11 @@ jobs:
       - name: Bump event-service image in Kustomize overlay
         run: |
           set -euo pipefail
-          strip_crlf_ws() {
-            local s
-            s="$(printf '%s' "${1:-}" | tr -d '\r\n')"
-            s="${s#"${s%%[![:space:]]*}"}"
-            s="${s%"${s##*[![:space:]]}"}"
-            printf '%s' "$s"
-          }
-          GCP_REGION="$(strip_crlf_ws "$GCP_REGION")"
-          GCP_PROJECT_ID="$(strip_crlf_ws "$GCP_PROJECT_ID")"
-          GCP_ARTIFACT_REGISTRY="$(strip_crlf_ws "$GCP_ARTIFACT_REGISTRY")"
-          GCP_IMAGE_NAME="$(strip_crlf_ws "$GCP_IMAGE_NAME")"
-          GITOPS_KUSTOMIZE_IMAGE_NAME="$(strip_crlf_ws "${GITOPS_KUSTOMIZE_IMAGE_NAME:-}")"
+          GCP_REGION="$(printf '%s' "$GCP_REGION" | tr -d '\r\n')"
+          GCP_PROJECT_ID="$(printf '%s' "$GCP_PROJECT_ID" | tr -d '\r\n')"
+          GCP_ARTIFACT_REGISTRY="$(printf '%s' "$GCP_ARTIFACT_REGISTRY" | tr -d '\r\n')"
+          GCP_IMAGE_NAME="$(printf '%s' "$GCP_IMAGE_NAME" | tr -d '\r\n')"
+          GITOPS_KUSTOMIZE_IMAGE_NAME="$(printf '%s' "${GITOPS_KUSTOMIZE_IMAGE_NAME:-}" | tr -d '\r\n')"
           IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REGISTRY}/${GCP_IMAGE_NAME}"
           KUSTOMIZE_IMAGE_NAME="${GITOPS_KUSTOMIZE_IMAGE_NAME:-${IMAGE}}"
           case "${GITHUB_REF_NAME}" in
