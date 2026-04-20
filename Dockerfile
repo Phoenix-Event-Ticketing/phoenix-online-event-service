@@ -8,7 +8,7 @@ RUN npm ci --omit=dev
 
 COPY src ./src
 
-USER node
+USER 1000:1000
 
 EXPOSE 4001
 
