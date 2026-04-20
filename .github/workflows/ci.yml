@@ -171,6 +171,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate GCP Artifact Registry configuration
+        run: |
+          set -euo pipefail
+          missing=()
+          trim() { printf '%s' "${1:-}" | tr -d '\r\n'; }
+          [ -z "$(trim "${GCP_PROJECT_ID:-}")" ] && missing+=("GCP_PROJECT_ID")
+          [ -z "$(trim "${GCP_REGION:-}")" ] && missing+=("GCP_REGION")
+          [ -z "$(trim "${GCP_ARTIFACT_REGISTRY:-}")" ] && missing+=("GCP_ARTIFACT_REGISTRY")
+          [ -z "$(trim "${GCP_IMAGE_NAME:-}")" ] && missing+=("GCP_IMAGE_NAME")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "ERROR: Missing or empty GitHub Actions repository variables: ${missing[*]}"
+            echo "Add them under: Settings > Secrets and variables > Actions > Variables"
+            echo "Required: GCP_PROJECT_ID, GCP_REGION, GCP_ARTIFACT_REGISTRY, GCP_IMAGE_NAME"
+            exit 1
+          fi
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -180,11 +196,18 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+        run: |
+          set -euo pipefail
+          GCP_REGION="$(printf '%s' "$GCP_REGION" | tr -d '\r\n')"
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
 
       - name: Build and push image
         run: |
           set -euo pipefail
+          GCP_REGION="$(printf '%s' "$GCP_REGION" | tr -d '\r\n')"
+          GCP_PROJECT_ID="$(printf '%s' "$GCP_PROJECT_ID" | tr -d '\r\n')"
+          GCP_ARTIFACT_REGISTRY="$(printf '%s' "$GCP_ARTIFACT_REGISTRY" | tr -d '\r\n')"
+          GCP_IMAGE_NAME="$(printf '%s' "$GCP_IMAGE_NAME" | tr -d '\r\n')"
           IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REGISTRY}/${GCP_IMAGE_NAME}"
           docker build -t "${IMAGE}:${GITHUB_SHA}" .
           docker push "${IMAGE}:${GITHUB_SHA}"
@@ -238,6 +261,11 @@ jobs:
       - name: Bump event-service image in Kustomize overlay
         run: |
           set -euo pipefail
+          GCP_REGION="$(printf '%s' "$GCP_REGION" | tr -d '\r\n')"
+          GCP_PROJECT_ID="$(printf '%s' "$GCP_PROJECT_ID" | tr -d '\r\n')"
+          GCP_ARTIFACT_REGISTRY="$(printf '%s' "$GCP_ARTIFACT_REGISTRY" | tr -d '\r\n')"
+          GCP_IMAGE_NAME="$(printf '%s' "$GCP_IMAGE_NAME" | tr -d '\r\n')"
+          GITOPS_KUSTOMIZE_IMAGE_NAME="$(printf '%s' "${GITOPS_KUSTOMIZE_IMAGE_NAME:-}" | tr -d '\r\n')"
           IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REGISTRY}/${GCP_IMAGE_NAME}"
           KUSTOMIZE_IMAGE_NAME="${GITOPS_KUSTOMIZE_IMAGE_NAME:-${IMAGE}}"
           case "${GITHUB_REF_NAME}" in
