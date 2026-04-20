@@ -273,7 +273,7 @@ jobs:
             main) OVERLAY_ENV=prod ;;
             *) echo "Unexpected ref: ${GITHUB_REF_NAME}"; exit 1 ;;
           esac
-          OVERLAY_DIR="gitops-repo/<actual-path>/${OVERLAY_ENV}"
+          OVERLAY_DIR="gitops-repo/apps/event-service/overlays/${OVERLAY_ENV}"
           cd "${OVERLAY_DIR}"
           export TAG="${GITHUB_SHA}"
           export IMG_NAME="${KUSTOMIZE_IMAGE_NAME}"
