@@ -239,7 +239,7 @@ export const eventServiceOpenApi = {
         },
       },
     },
-    "/api/v1/events": {
+    "/events": {
       get: {
         tags: ["Events"],
         summary: "List published events",
@@ -276,7 +276,7 @@ export const eventServiceOpenApi = {
         },
       },
     },
-    "/api/v1/events/{eventId}": {
+    "/events/{eventId}": {
       get: {
         tags: ["Events"],
         summary: "Get event by id (public detail)",
@@ -314,15 +314,15 @@ export const eventServiceOpenApi = {
         },
       },
     },
-    "/api/v1/events/{eventId}/publish": patchEventSubresource(
+    "/events/{eventId}/publish": patchEventSubresource(
       "Publish event",
       "Requires `PUBLISH_EVENT`. Sets status to PUBLISHED.",
     ),
-    "/api/v1/events/{eventId}/cancel": patchEventSubresource(
+    "/events/{eventId}/cancel": patchEventSubresource(
       "Cancel event",
       "Requires `UPDATE_EVENT`. Sets status to CANCELLED.",
     ),
-    "/api/v1/events/internal/events": {
+    "/events/internal/events": {
       get: {
         tags: ["Internal"],
         summary: "List all events (all statuses)",
@@ -336,7 +336,7 @@ export const eventServiceOpenApi = {
         },
       },
     },
-    "/api/v1/events/internal/events/{eventId}": {
+    "/events/internal/events/{eventId}": {
       get: {
         tags: ["Internal"],
         summary: "Get event with inventory sidecars",

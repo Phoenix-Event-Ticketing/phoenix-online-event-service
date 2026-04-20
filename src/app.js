@@ -11,7 +11,7 @@ export function createApp() {
   const app = express();
 
   app.use((req, res, next) => {
-    const docs = req.path.startsWith("/api/v1/events/docs");
+    const docs = req.path.startsWith("/events/docs");
     (docs ? helmet({ contentSecurityPolicy: false }) : helmet())(req, res, next);
   });
   app.use(cors());
@@ -25,13 +25,13 @@ export function createApp() {
   });
 
   app.use(
-    "/api/v1/events/docs",
+    "/events/docs",
     swaggerUi.serve,
     swaggerUi.setup(eventServiceOpenApi, {
       defaultModelsExpandDepth: -1,
     }),
   );
-  app.use("/api/v1/events", eventRouter);
+  app.use("/events", eventRouter);
 
   app.get("/health", (req, res) => {
     res.json({ status: "ok", service: env.serviceName });
