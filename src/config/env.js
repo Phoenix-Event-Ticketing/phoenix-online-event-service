@@ -12,6 +12,9 @@ export const env = {
   serviceName: process.env.SERVICE_NAME || "event-service",
   inventoryServiceUrl:
     process.env.INVENTORY_SERVICE_URL || "http://localhost:8080",
+  metricsEnabled: String(process.env.METRICS_ENABLED || "true").toLowerCase() === "true",
+  jaegerEndpoint: process.env.JAEGER_ENDPOINT || "",
+  otelServiceName: process.env.OTEL_SERVICE_NAME || "event-service",
   jwtSecret: (process.env.JWT_SECRET || "dev-jwt-secret-change-in-prod").trim(),
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,

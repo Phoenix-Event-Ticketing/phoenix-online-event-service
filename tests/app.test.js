@@ -9,7 +9,7 @@ await jest.unstable_mockModule("../src/routes/event.routes.js", () => ({
 }));
 
 await jest.unstable_mockModule("../src/config/env.js", () => ({
-  env: { serviceName: "event-service" },
+  env: { serviceName: "event-service", metricsEnabled: true },
 }));
 
 const mockLoggerError = jest.fn();
@@ -37,7 +37,8 @@ describe("createApp", () => {
     expect(health.body).toEqual({ status: "ok", service: "event-service" });
 
     const errRes = await request(app).get("/events/boom").expect(500);
-    expect(errRes.body).toEqual({ message: "Internal server error" });
+    expect(errRes.body.message).toBe("Internal server error");
+    expect(errRes.body.errorCode).toBe("INTERNAL_ERROR");
     expect(mockLoggerError).toHaveBeenCalled();
   });
 
@@ -45,5 +46,11 @@ describe("createApp", () => {
     const app = createApp();
     const docs = await request(app).get("/events/docs").expect(200);
     expect(docs.body).toEqual({ docs: true });
+  });
+
+  it("exposes prometheus metrics endpoint", async () => {
+    const app = createApp();
+    const metrics = await request(app).get("/metrics").expect(200);
+    expect(metrics.text).toContain("event_http_requests_total");
   });
 });

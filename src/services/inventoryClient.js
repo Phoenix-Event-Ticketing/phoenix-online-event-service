@@ -15,6 +15,8 @@ async function getJson(root, path, options = {}) {
   const headers = {
     Accept: "application/json",
     ...(options.requestId && { "X-Request-Id": String(options.requestId) }),
+    ...(options.traceId && { "X-Trace-Id": String(options.traceId) }),
+    ...(options.traceparent && { traceparent: String(options.traceparent) }),
   };
 
   try {
