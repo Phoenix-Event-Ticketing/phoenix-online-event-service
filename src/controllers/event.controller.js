@@ -10,6 +10,8 @@ import {
 } from "../services/inventoryClient.js";
 import { logHttp } from "../utils/logger.js";
 import { uploadBufferToCloudinary } from "../utils/upload.js";
+import { apiError } from "../utils/apiError.js";
+import { eventLookupRequests } from "../observability/metrics.js";
 
 const EVENT_WRITABLE_FIELDS = [
   "title",
@@ -53,9 +55,13 @@ function respondAfterWriteFailure(req, res, operation, err) {
     message: `Failed to ${failVerb}`,
     metadata: { error: err.message },
   });
-  return res
-    .status(isUploadRelatedError(err) ? 400 : 500)
-    .json({ message: err.message || "Internal server error" });
+  return apiError(
+    res,
+    isUploadRelatedError(err) ? 400 : 500,
+    err.message || "Internal server error",
+    isUploadRelatedError(err) ? "VALIDATION_FAILED" : "INTERNAL_ERROR",
+    req,
+  );
 }
 
 function respondWithServerError(req, res, operation, err, failureMessage) {
@@ -67,7 +73,7 @@ function respondWithServerError(req, res, operation, err, failureMessage) {
     message: failureMessage,
     metadata: { error: err.message },
   });
-  return res.status(500).json({ message: "Internal server error" });
+  return apiError(res, 500, "Internal server error", "INTERNAL_ERROR", req);
 }
 
 async function loadInventorySidecars(eventId, req) {
@@ -75,6 +81,8 @@ async function loadInventorySidecars(eventId, req) {
     return { ticketInventory: null, availabilitySummary: null };
   }
   const opts = { requestId: req.headers["x-request-id"] };
+  opts.traceId = req.headers["x-trace-id"];
+  opts.traceparent = req.headers.traceparent;
   const [invRes, avRes] = await Promise.all([
     fetchEventInventory(env.inventoryServiceUrl, eventId, opts),
     fetchEventAvailability(env.inventoryServiceUrl, eventId, opts),
@@ -123,7 +131,7 @@ async function updateEventStatus(req, res, nextStatus, labels) {
         message: notFoundMessage,
         metadata: { eventId },
       });
-      return res.status(404).json({ message: "Event not found" });
+      return apiError(res, 404, "Event not found", "EVENT_NOT_FOUND", req);
     }
     logHttp({
       level: "info",
@@ -196,6 +204,8 @@ export async function listEvents(req, res) {
     }
     const opts = {
       requestId: req.headers["x-request-id"],
+      traceId: req.headers["x-trace-id"],
+      traceparent: req.headers.traceparent,
       timeoutMs: LIST_FETCH_TIMEOUT_MS,
     };
     const invResults = await Promise.all(
@@ -249,6 +259,7 @@ export async function getEventById(req, res) {
     const { eventId } = req.params;
     const event = await Event.findOne({ eventId }).lean();
     if (!event) {
+      eventLookupRequests.inc({ route: "/events/:eventId", outcome: "not_found" });
       logHttp({
         level: "info",
         req,
@@ -257,8 +268,9 @@ export async function getEventById(req, res) {
         message: "Event not found",
         metadata: { eventId },
       });
-      return res.status(404).json({ message: "Event not found" });
+      return apiError(res, 404, "Event not found", "EVENT_NOT_FOUND", req);
     }
+    eventLookupRequests.inc({ route: "/events/:eventId", outcome: "success" });
     const tickets = await loadTicketsForEventDetail(eventId, req);
     return res.json({ ...event, tickets });
   } catch (err) {
@@ -277,6 +289,7 @@ export async function getInternalEvent(req, res) {
     const { eventId } = req.params;
     const event = await Event.findOne({ eventId }).lean();
     if (!event) {
+      eventLookupRequests.inc({ route: "/events/internal/events/:eventId", outcome: "not_found" });
       logHttp({
         level: "info",
         req,
@@ -285,8 +298,9 @@ export async function getInternalEvent(req, res) {
         message: "Internal event not found",
         metadata: { eventId },
       });
-      return res.status(404).json({ message: "Event not found" });
+      return apiError(res, 404, "Event not found", "EVENT_NOT_FOUND", req);
     }
+    eventLookupRequests.inc({ route: "/events/internal/events/:eventId", outcome: "success" });
     logHttp({
       level: "info",
       req,
@@ -340,7 +354,7 @@ export async function updateEvent(req, res) {
         message: "Event to update not found",
         metadata: { eventId },
       });
-      return res.status(404).json({ message: "Event not found" });
+      return apiError(res, 404, "Event not found", "EVENT_NOT_FOUND", req);
     }
     return res.json(updated);
   } catch (err) {

@@ -78,21 +78,21 @@ describe("events API (integration)", () => {
     store.clear();
   });
 
-  it("GET /api/v1/events returns empty list when no published events", async () => {
-    const res = await request(app).get("/api/v1/events").expect(200);
+  it("GET /events returns empty list when no published events", async () => {
+    const res = await request(app).get("/events").expect(200);
     expect(res.body).toEqual([]);
   });
 
-  it("POST /api/v1/events returns 401 without Authorization", async () => {
+  it("POST /events returns 401 without Authorization", async () => {
     const res = await request(app)
-      .post("/api/v1/events")
+      .post("/events")
       .send(basePayload());
     expect(res.status).toBe(401);
   });
 
-  it("POST /api/v1/events returns 403 when token lacks CREATE_EVENT", async () => {
+  it("POST /events returns 403 when token lacks CREATE_EVENT", async () => {
     const res = await request(app)
-      .post("/api/v1/events")
+      .post("/events")
       .set(authHeader([PERMISSIONS.VIEW_EVENTS]))
       .send(basePayload());
     expect(res.status).toBe(403);
@@ -100,7 +100,7 @@ describe("events API (integration)", () => {
 
   it("creates a draft event and exposes it by id; public list stays empty until publish", async () => {
     const createRes = await request(app)
-      .post("/api/v1/events")
+      .post("/events")
       .set(authHeader([PERMISSIONS.CREATE_EVENT]))
       .send(basePayload())
       .expect(201);
@@ -109,11 +109,11 @@ describe("events API (integration)", () => {
     expect(eventId).toMatch(/^evt_/);
     expect(createRes.body.status).toBe("DRAFT");
 
-    const listRes = await request(app).get("/api/v1/events").expect(200);
+    const listRes = await request(app).get("/events").expect(200);
     expect(listRes.body).toEqual([]);
 
     const getRes = await request(app)
-      .get(`/api/v1/events/${eventId}`)
+      .get(`/events/${eventId}`)
       .expect(200);
     expect(getRes.body.eventId).toBe(eventId);
     expect(getRes.body.title).toBe("Summer Fest");
@@ -122,17 +122,17 @@ describe("events API (integration)", () => {
 
   it("publishing makes the event visible on the public list", async () => {
     const { body: created } = await request(app)
-      .post("/api/v1/events")
+      .post("/events")
       .set(authHeader([PERMISSIONS.CREATE_EVENT]))
       .send(basePayload())
       .expect(201);
 
     const publishRes = await request(app)
-      .patch(`/api/v1/events/${created.eventId}/publish`)
+      .patch(`/events/${created.eventId}/publish`)
       .set(authHeader([PERMISSIONS.PUBLISH_EVENT]));
     expect(publishRes.status).toBe(200);
 
-    const listRes = await request(app).get("/api/v1/events");
+    const listRes = await request(app).get("/events");
     expect(listRes.status).toBe(200);
     expect(listRes.body).toHaveLength(1);
     expect(listRes.body[0].eventId).toBe(created.eventId);
@@ -142,13 +142,13 @@ describe("events API (integration)", () => {
 
   it("internal list returns all events when authorized", async () => {
     const createRes = await request(app)
-      .post("/api/v1/events")
+      .post("/events")
       .set(authHeader([PERMISSIONS.CREATE_EVENT]))
       .send(basePayload());
     expect(createRes.status).toBe(201);
 
     const internal = await request(app)
-      .get("/api/v1/events/internal/events")
+      .get("/events/internal/events")
       .set(authHeader([PERMISSIONS.VIEW_EVENTS]));
     expect(internal.status).toBe(200);
 
@@ -158,13 +158,13 @@ describe("events API (integration)", () => {
 
   it("updates an event with UPDATE_EVENT permission", async () => {
     const { body: created } = await request(app)
-      .post("/api/v1/events")
+      .post("/events")
       .set(authHeader([PERMISSIONS.CREATE_EVENT]))
       .send(basePayload())
       .expect(201);
 
     const updated = await request(app)
-      .put(`/api/v1/events/${created.eventId}`)
+      .put(`/events/${created.eventId}`)
       .set(authHeader([PERMISSIONS.UPDATE_EVENT]))
       .send({ title: "Renamed Fest" })
       .expect(200);
@@ -174,32 +174,32 @@ describe("events API (integration)", () => {
 
   it("cancelling removes the event from the public published list", async () => {
     const { body: created } = await request(app)
-      .post("/api/v1/events")
+      .post("/events")
       .set(authHeader([PERMISSIONS.CREATE_EVENT]))
       .send(basePayload())
       .expect(201);
 
     const publishRes = await request(app)
-      .patch(`/api/v1/events/${created.eventId}/publish`)
+      .patch(`/events/${created.eventId}/publish`)
       .set(authHeader([PERMISSIONS.PUBLISH_EVENT]));
     expect(publishRes.status).toBe(200);
 
-    const afterPublishList = await request(app).get("/api/v1/events");
+    const afterPublishList = await request(app).get("/events");
     expect(afterPublishList.status).toBe(200);
     expect(afterPublishList.body).toHaveLength(1);
 
     const cancelRes = await request(app)
-      .patch(`/api/v1/events/${created.eventId}/cancel`)
+      .patch(`/events/${created.eventId}/cancel`)
       .set(authHeader([PERMISSIONS.UPDATE_EVENT]));
     expect(cancelRes.status).toBe(200);
 
-    const listRes = await request(app).get("/api/v1/events");
+    const listRes = await request(app).get("/events");
     expect(listRes.status).toBe(200);
     expect(listRes.body).toEqual([]);
   });
 
-  it("GET /api/v1/events/:eventId returns 404 when missing", async () => {
-    const res = await request(app).get("/api/v1/events/evt_nonexistent");
+  it("GET /events/:eventId returns 404 when missing", async () => {
+    const res = await request(app).get("/events/evt_nonexistent");
     expect(res.status).toBe(404);
   });
 });

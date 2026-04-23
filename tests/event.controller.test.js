@@ -81,7 +81,10 @@ describe("event.controller", () => {
       const res = mockRes();
       await listEvents({ headers: {} }, res);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ message: "Internal server error" });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        message: "Internal server error",
+        errorCode: "INTERNAL_ERROR",
+      }));
     });
   });
 
@@ -101,7 +104,10 @@ describe("event.controller", () => {
       const res = mockRes();
       await listAllEvents({}, res);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ message: "Internal server error" });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        message: "Internal server error",
+        errorCode: "INTERNAL_ERROR",
+      }));
     });
   });
 
@@ -141,7 +147,10 @@ describe("event.controller", () => {
         res,
       );
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ message: "Internal server error" });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        message: "Internal server error",
+        errorCode: "INTERNAL_ERROR",
+      }));
     });
   });
 
