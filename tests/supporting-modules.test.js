@@ -34,10 +34,21 @@ describe("inventoryClient", () => {
     });
 
     const inv = await fetchEventInventory("http://inv", "evt a", {
+      authorization: "Bearer svc-token",
       requestId: "r1",
     });
     expect(inv.ok).toBe(true);
     expect(inv.data.items[0].ticketType).toBe("VIP");
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://inv/inventory/event/evt%20a",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer svc-token",
+          Accept: "application/json",
+          "X-Request-Id": "r1",
+        }),
+      }),
+    );
 
     const av = await fetchEventAvailability("http://inv", "evt_1");
     expect(av.ok).toBe(true);

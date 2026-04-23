@@ -8,6 +8,7 @@ import {
   ticketsFromDetailSidecars,
   ticketsFromInventoryListResponse,
 } from "../services/inventoryClient.js";
+import { createInternalServiceAuthorizationHeader } from "../services/internalServiceToken.js";
 import { logHttp } from "../utils/logger.js";
 import { uploadBufferToCloudinary } from "../utils/upload.js";
 import { apiError } from "../utils/apiError.js";
@@ -80,8 +81,11 @@ async function loadInventorySidecars(eventId, req) {
   if (!env.inventoryServiceUrl) {
     return { ticketInventory: null, availabilitySummary: null };
   }
-  const opts = { requestId: req.headers["x-request-id"] };
-  opts.authorization = req.headers.authorization;
+  const opts = {
+    authorization:
+      req.headers.authorization || createInternalServiceAuthorizationHeader(),
+    requestId: req.headers["x-request-id"],
+  };
   opts.traceId = req.headers["x-trace-id"];
   opts.traceparent = req.headers.traceparent;
   const [invRes, avRes] = await Promise.all([
@@ -204,7 +208,8 @@ export async function listEvents(req, res) {
       );
     }
     const opts = {
-      authorization: req.headers.authorization,
+      authorization:
+        req.headers.authorization || createInternalServiceAuthorizationHeader(),
       requestId: req.headers["x-request-id"],
       traceId: req.headers["x-trace-id"],
       traceparent: req.headers.traceparent,
