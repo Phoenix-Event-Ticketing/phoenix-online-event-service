@@ -14,6 +14,9 @@ async function getJson(root, path, options = {}) {
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   const headers = {
     Accept: "application/json",
+    ...(options.authorization && {
+      Authorization: String(options.authorization),
+    }),
     ...(options.requestId && { "X-Request-Id": String(options.requestId) }),
     ...(options.traceId && { "X-Trace-Id": String(options.traceId) }),
     ...(options.traceparent && { traceparent: String(options.traceparent) }),

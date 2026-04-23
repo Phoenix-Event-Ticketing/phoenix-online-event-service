@@ -81,6 +81,7 @@ async function loadInventorySidecars(eventId, req) {
     return { ticketInventory: null, availabilitySummary: null };
   }
   const opts = { requestId: req.headers["x-request-id"] };
+  opts.authorization = req.headers.authorization;
   opts.traceId = req.headers["x-trace-id"];
   opts.traceparent = req.headers.traceparent;
   const [invRes, avRes] = await Promise.all([
@@ -203,6 +204,7 @@ export async function listEvents(req, res) {
       );
     }
     const opts = {
+      authorization: req.headers.authorization,
       requestId: req.headers["x-request-id"],
       traceId: req.headers["x-trace-id"],
       traceparent: req.headers.traceparent,
