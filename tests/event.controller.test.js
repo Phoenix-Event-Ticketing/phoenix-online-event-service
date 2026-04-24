@@ -45,6 +45,7 @@ const {
   listEvents,
   listAllEvents,
   getEventById,
+  getEventBasicById,
   getInternalEvent,
   updateEvent,
   publishEvent,
@@ -151,6 +152,31 @@ describe("event.controller", () => {
         message: "Internal server error",
         errorCode: "INTERNAL_ERROR",
       }));
+    });
+  });
+
+  describe("getEventBasicById", () => {
+    it("returns 404 when missing", async () => {
+      const lean = jest.fn().mockResolvedValue(null);
+      mockFindOne.mockReturnValue({ lean });
+      const res = mockRes();
+      await getEventBasicById(
+        { params: { eventId: "evt_x" }, headers: {} },
+        res,
+      );
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
+
+    it("returns basic event when found", async () => {
+      const doc = { eventId: "evt_x", title: "T", status: "PUBLISHED" };
+      const lean = jest.fn().mockResolvedValue(doc);
+      mockFindOne.mockReturnValue({ lean });
+      const res = mockRes();
+      await getEventBasicById(
+        { params: { eventId: "evt_x" }, headers: {} },
+        res,
+      );
+      expect(res.json).toHaveBeenCalledWith(doc);
     });
   });
 

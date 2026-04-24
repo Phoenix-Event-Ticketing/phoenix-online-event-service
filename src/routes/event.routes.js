@@ -4,6 +4,7 @@ import {
   listEvents,
   listAllEvents,
   getEventById,
+  getEventBasicById,
   updateEvent,
   publishEvent,
   cancelEvent,
@@ -35,6 +36,7 @@ router.get(
   authorize([PERMISSIONS.VIEW_EVENTS]),
   getInternalEvent,
 );
+router.get("/:eventId/basic", getEventBasicById);
 router.get("/:eventId", getEventById);
 
 router.post(

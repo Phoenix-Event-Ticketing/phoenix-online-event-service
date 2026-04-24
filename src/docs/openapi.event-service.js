@@ -314,6 +314,20 @@ export const eventServiceOpenApi = {
         },
       },
     },
+    "/events/{eventId}/basic": {
+      get: {
+        tags: ["Events"],
+        summary: "Get event by id (basic, no inventory sidecars)",
+        description:
+          "Returns only the event document without inventory enrichment. Useful for inter-service validation calls.",
+        parameters: [componentRef("parameters", "eventId")],
+        responses: {
+          200: componentRef("responses", "EventOne"),
+          404: componentRef("responses", "NotFound"),
+          500: componentRef("responses", "ServerError"),
+        },
+      },
+    },
     "/events/{eventId}/publish": patchEventSubresource(
       "Publish event",
       "Requires `PUBLISH_EVENT`. Sets status to PUBLISHED.",

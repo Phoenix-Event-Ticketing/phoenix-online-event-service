@@ -291,6 +291,41 @@ export async function getEventById(req, res) {
   }
 }
 
+export async function getEventBasicById(req, res) {
+  try {
+    const { eventId } = req.params;
+    const event = await Event.findOne({ eventId }).lean();
+    if (!event) {
+      logHttp({
+        level: "info",
+        req,
+        res,
+        operation: "get_event_basic_by_id",
+        message: "Event not found",
+        metadata: { eventId },
+      });
+      return apiError(res, 404, "Event not found", "EVENT_NOT_FOUND", req);
+    }
+    logHttp({
+      level: "info",
+      req,
+      res,
+      operation: "get_event_basic_by_id",
+      message: "Event fetched (basic)",
+      metadata: { eventId },
+    });
+    return res.json(event);
+  } catch (err) {
+    return respondWithServerError(
+      req,
+      res,
+      "get_event_basic_by_id",
+      err,
+      "Failed to fetch basic event",
+    );
+  }
+}
+
 export async function getInternalEvent(req, res) {
   try {
     const { eventId } = req.params;
